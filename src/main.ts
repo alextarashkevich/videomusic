@@ -1,5 +1,5 @@
 import './style.css'
-import { createAudioEngine } from './audio/engine'
+import { createAudioEngine, type AudioEngine } from './audio/engine'
 import { chordNotes } from './audio/voicing'
 import { loadConfig } from './config'
 import { describeMask } from './gesture/fingers'
@@ -23,6 +23,10 @@ const config = loadConfig()
 
 const ROMAN = ['—', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII'] as const
 
+// Held across attempts: if the camera fails and the user retries, rebuilding this would
+// leave the first synth and its AudioContext running behind the second.
+let audio: AudioEngine | null = null
+
 function bar(value: number, width = 12): string {
   const filled = Math.round(value * width)
   return '█'.repeat(filled) + '░'.repeat(width - filled)
@@ -42,13 +46,22 @@ async function start(): Promise<void> {
 
   // Audio first: the AudioContext may only start inside the click that triggered this,
   // and awaiting the camera before it would lose that permission.
-  const audio = await createAudioEngine(config)
-  await audio.resume()
+  audio ??= await createAudioEngine(config)
+  const engine = audio
+  await engine.resume()
+
   const camera = await startCamera(video)
   const tracker = await createHandTracker(config)
   const overlay = createOverlay(overlayCanvas, camera.video)
   const visualizer = createVisualizer(sceneCanvas)
   const interpreter = createInterpreter(config)
+
+  // The very first inference compiles the GPU shaders and takes around four seconds.
+  // Spending it here, while the button still reads "Starting…", keeps it from freezing
+  // the first frame of the instrument after the start screen has already gone.
+  startButton.textContent = 'Warming up…'
+  await new Promise((resolve) => requestAnimationFrame(resolve))
+  tracker.detect(camera.video, performance.now())
 
   // Mutates config in place; the interpreter and engine both re-read it every frame, so
   // changes are audible as they are dragged.
@@ -108,9 +121,9 @@ async function start(): Promise<void> {
     detectMs += (performance.now() - before - detectMs) * 0.1
 
     const state = interpreter.update(frame)
-    audio.update(state)
+    engine.update(state)
 
-    visualizer.update(state, audio.getLevel(), now)
+    visualizer.update(state, engine.getLevel(), now)
 
     if (showSkeleton) overlay.draw(frame)
     else overlay.clear()
