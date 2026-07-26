@@ -111,10 +111,12 @@ export function createInterpreter(config: Config): Interpreter {
       const { stabilityFrames, handLostFrames } = config.gesture
 
       if (frame.right !== null) {
-        const mask = fingerMask(frame.right.landmarks, config)
+        // Shape from the 3D world landmarks, screen-space readings from the flat ones.
+        const shape = config.vision.use3d ? frame.right.world : frame.right.landmarks
+        const mask = fingerMask(shape, config)
         debug.rightMask = mask
         debug.rightTilt = tiltMagnitude(frame.right.landmarks)
-        debug.rightReach = fingerReach(frame.right.landmarks)
+        debug.rightReach = fingerReach(shape)
 
         // An unrecognised shape yields null, which holds the last degree instead of
         // committing a stray one. This is what makes rearranging fingers silent: the
@@ -129,7 +131,7 @@ export function createInterpreter(config: Config): Interpreter {
       }
 
       if (frame.left !== null) {
-        const mask = fingerMask(frame.left.landmarks, config)
+        const mask = fingerMask(config.vision.use3d ? frame.left.world : frame.left.landmarks, config)
         debug.leftMask = mask
         debug.leftTilt = tiltMagnitude(frame.left.landmarks)
 

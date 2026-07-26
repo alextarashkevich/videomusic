@@ -13,7 +13,10 @@ beforeEach(() => {
 })
 
 function hand(fingers: FingerStates, options?: HandOptions) {
-  return { landmarks: makeHand(fingers, options), score: 0.95 }
+  // One point set serves as both: the shape tests read its depth, the screen-space
+  // readings ignore it, exactly as production does with the two coordinate systems.
+  const landmarks = makeHand(fingers, options)
+  return { landmarks, world: landmarks, score: 0.95 }
 }
 
 /** Feeds the same frame repeatedly, the way a held gesture arrives. */
@@ -349,8 +352,7 @@ describe('debug readout', () => {
 describe('landmark safety', () => {
   it('does not throw on empty landmark arrays', () => {
     const empty: Landmarks = []
-    expect(() =>
-      interpreter.update({ right: { landmarks: empty, score: 0 }, left: { landmarks: empty, score: 0 } }),
-    ).not.toThrow()
+    const blank = { landmarks: empty, world: empty, score: 0 }
+    expect(() => interpreter.update({ right: blank, left: blank })).not.toThrow()
   })
 })

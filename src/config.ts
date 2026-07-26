@@ -13,9 +13,11 @@ export type Config = {
      *  widths. Measured from the knuckle rather than the middle joint because the joint
      *  moves outward as a finger curls, chasing the tip and hiding the difference. */
     extendedReach: number
-    /** The thumb folds across a different axis, so it is judged by how far its tip sits
-     *  from the pinky knuckle, in hand units. */
-    thumbSpread: number
+    /** The thumb does not curl like the others, so it is judged by how far it is swung
+     *  away from the line of the palm, in degrees. An angle between two directions on
+     *  the same hand is unaffected by hand size, by rotation, or by what the other
+     *  fingers are doing — none of which was true of the distance it replaced. */
+    thumbAngleDeg: number
     /** Frames a new hand shape must persist before it takes effect. At ~30 fps this is
      *  the delay between moving your fingers and hearing it. */
     stabilityFrames: number
@@ -76,13 +78,23 @@ export type Config = {
      *  which way round MediaPipe reports handedness is not reliably predictable — see
      *  vision/handTracker.ts. Flip it if the wrong hand is choosing notes. */
     swapHands: boolean
+    /**
+     * Measure hand shape from the tracker's 3D world coordinates rather than the flat
+     * image.
+     *
+     * In principle this is the right input: depth is real there, so turning your hand
+     * away from the camera cannot foreshorten a finger into reading as folded. In
+     * practice the depth estimate is noisier than x and y, so if recognition gets
+     * jumpier rather than steadier, turn it off and the flat measurement comes back.
+     */
+    use3d: boolean
   }
 }
 
 export const defaultConfig: Config = {
   gesture: {
     extendedReach: 0.45,
-    thumbSpread: 1.0,
+    thumbAngleDeg: 35,
     stabilityFrames: 2,
     handLostFrames: 8,
   },
@@ -117,6 +129,7 @@ export const defaultConfig: Config = {
     minHandPresenceConfidence: 0.5,
     minTrackingConfidence: 0.5,
     swapHands: false,
+    use3d: true,
   },
 }
 

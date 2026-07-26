@@ -38,15 +38,16 @@ export const CONTROLS: readonly Control[] = [
   },
   {
     group: 'Recognition',
-    label: 'Thumb spread',
-    min: 0.5,
-    max: 1.8,
-    step: 0.01,
-    get: (c) => c.gesture.thumbSpread,
+    label: 'Thumb angle',
+    min: 10,
+    max: 70,
+    step: 1,
+    format: degrees,
+    get: (c) => c.gesture.thumbAngleDeg,
     set: (c, v) => {
-      c.gesture.thumbSpread = v
+      c.gesture.thumbAngleDeg = v
     },
-    hint: 'How far the thumb must sit from the pinky knuckle to count as out. This is what separates коза from коза with the thumb.',
+    hint: 'How far the thumb must swing off the line of the palm to count as out. The readout shows the live angle. This is what separates an open palm from four fingers, and коза from коза with the thumb.',
   },
   {
     group: 'Recognition',

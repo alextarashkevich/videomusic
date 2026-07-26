@@ -33,9 +33,10 @@ let audio: AudioEngine | null = null
 /** Per-finger reach, so the extension threshold can be read off a real hand: hold up
  *  one finger, then two, and the boundary is plainly between the two sets of numbers. */
 function reachOf(reach: Record<string, number>): string {
-  return ['index', 'middle', 'ring', 'pinky', 'thumb']
+  const fingers = ['index', 'middle', 'ring', 'pinky']
     .map((finger) => (reach[finger] ?? 0).toFixed(2))
     .join(' ')
+  return `${fingers}   ${(reach['thumb'] ?? 0).toFixed(0).padStart(2)}°`
 }
 
 function bar(value: number, width = 12): string {
@@ -196,7 +197,8 @@ async function start(): Promise<void> {
       `vol    ${bar(state.volume)} ${(state.volume * 100).toFixed(0).padStart(3)}%`,
       '',
       `reach  ${reachOf(interpreter.debug.rightReach)}`,
-      `       I    M    R    P    thumb   (>${config.gesture.extendedReach.toFixed(2)} = up)`,
+      `       I    M    R    P     thumb`,
+      `       up over ${config.gesture.extendedReach.toFixed(2)}      over ${config.gesture.thumbAngleDeg}°`,
     ].join('\n')
   }
 

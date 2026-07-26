@@ -50,6 +50,18 @@ export function createTuningPanel(config: Config): TuningPanel {
       },
     ),
   )
+  refreshers.push(
+    addToggle(
+      body,
+      'Depth-aware shape',
+      'Reads hand shape from the tracker\u2019s 3D output instead of the flat image, so turning your hand away from the camera cannot shorten a finger into reading as folded. The depth estimate is noisier than the rest, so turn it off if recognition gets jumpier rather than steadier.',
+      config,
+      (c) => c.vision.use3d,
+      (c, value) => {
+        c.vision.use3d = value
+      },
+    ),
+  )
 
   let currentGroup = ''
 
@@ -90,24 +102,16 @@ export function createTuningPanel(config: Config): TuningPanel {
     for (const listener of listeners) listener(open)
   }
 
-  function onKey(event: KeyboardEvent): void {
-    if (event.key.toLowerCase() !== 't') return
-    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) return
-    setOpen(panel.hidden)
-  }
-
-  window.addEventListener('keydown', onKey)
-
+  // No keyboard handler here on purpose. main.ts owns every shortcut; a listener here as
+  // well meant the T key toggled the panel twice in one press and it appeared to do
+  // nothing at all.
   return {
     get open() {
       return !panel.hidden
     },
     toggle: () => setOpen(panel.hidden),
     onToggle: (listener) => listeners.push(listener),
-    dispose: () => {
-      window.removeEventListener('keydown', onKey)
-      panel.remove()
-    },
+    dispose: () => panel.remove(),
   }
 }
 

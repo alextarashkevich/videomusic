@@ -76,13 +76,14 @@ type Routed = { hand: Hand; label: string; x: number }
  * labels are useless and screen position decides instead.
  */
 function route(
-  result: { landmarks: unknown[]; handedness: unknown[] },
+  result: { landmarks: unknown[]; worldLandmarks: unknown[]; handedness: unknown[] },
   swap: boolean,
 ): HandFrame {
   const detections: Routed[] = []
 
   for (let i = 0; i < result.landmarks.length; i++) {
     const landmarks = result.landmarks[i] as Hand['landmarks']
+    const world = result.worldLandmarks[i] as Hand['world'] | undefined
     const categories = result.handedness[i] as { categoryName: string; score: number }[] | undefined
     const top = categories?.[0]
     if (landmarks === undefined || landmarks.length === 0 || top === undefined) continue
@@ -91,7 +92,9 @@ function route(
     if (wrist === undefined) continue
 
     detections.push({
-      hand: { landmarks, score: top.score },
+      // Falling back to the flat landmarks keeps the instrument playable if world
+      // coordinates ever go missing, at the cost of the depth correction.
+      hand: { landmarks, world: world ?? landmarks, score: top.score },
       label: top.categoryName,
       x: wrist.x,
     })

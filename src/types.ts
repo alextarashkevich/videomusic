@@ -6,7 +6,18 @@ export type Landmark = { x: number; y: number; z: number }
 export type Landmarks = readonly Landmark[]
 
 export type Hand = {
+  /** Image-space landmarks, for anything to do with where the hand is on screen:
+   *  drawing it, its height in frame, and how far it is rolled. */
   landmarks: Landmarks
+  /**
+   * The same 21 points in real 3D, in metres, relative to the hand's own centre.
+   *
+   * Everything about the *shape* of the hand is measured from these instead. In the flat
+   * image, turning your hand away from the camera foreshortens the fingers — a fully
+   * extended finger projects short and reads as folded — which is exactly why tilting
+   * the hand used to break recognition. Depth is what removes that.
+   */
+  world: Landmarks
   /** Detector confidence, 0..1. */
   score: number
 }

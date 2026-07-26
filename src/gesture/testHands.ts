@@ -21,8 +21,16 @@ export type FingerStates = {
 }
 
 export type HandOptions = {
-  /** Degrees of tilt from vertical, positive clockwise on screen. */
+  /** Degrees of roll in the plane of the screen, positive clockwise. */
   tilt?: number
+  /**
+   * Degrees the hand is turned away from the camera, about the horizontal axis.
+   *
+   * This is the rotation that broke flat measurement: it leaves 3D distances untouched
+   * while squashing everything vertically in the projected image, so extended fingers
+   * measure short and read as folded.
+   */
+  pitch?: number
   /** Multiplier on the whole hand — stands in for distance from the camera. */
   scale?: number
   /** Where the wrist lands in normalised image coordinates. */
@@ -80,7 +88,7 @@ function fingerJoints(knuckle: Vec, extended: boolean): [Vec, Vec, Vec] {
 }
 
 export function makeHand(fingers: FingerStates, options: HandOptions = {}): Landmarks {
-  const { tilt = 0, scale = 0.25, center = { x: 0.5, y: 0.6 } } = options
+  const { tilt = 0, pitch = 0, scale = 0.25, center = { x: 0.5, y: 0.6 } } = options
 
   const points: Vec[] = new Array<Vec>(21).fill({ x: 0, y: 0 })
   points[LANDMARK.WRIST] = { x: 0, y: 0 }
@@ -107,16 +115,31 @@ export function makeHand(fingers: FingerStates, options: HandOptions = {}): Land
     points[mcpIndex + 3] = tip
   }
 
-  const radians = (tilt * Math.PI) / 180
-  const cos = Math.cos(radians)
-  const sin = Math.sin(radians)
+  const roll = (tilt * Math.PI) / 180
+  const cosRoll = Math.cos(roll)
+  const sinRoll = Math.sin(roll)
+
+  const lean = (pitch * Math.PI) / 180
+  const cosLean = Math.cos(lean)
+  const sinLean = Math.sin(lean)
 
   return points.map((point): Landmark => {
-    // Rotate clockwise on screen, where y grows downward.
-    const x = point.x * cos - point.y * sin
-    const y = point.x * sin + point.y * cos
-    return { x: center.x + x * scale, y: center.y + y * scale, z: 0 }
+    // Turn away from the camera first: y compresses into z, so 3D lengths survive but
+    // the projected image is squashed.
+    const leanedY = point.y * cosLean
+    const leanedZ = point.y * sinLean
+
+    // Then roll in the plane of the screen, where y grows downward.
+    const x = point.x * cosRoll - leanedY * sinRoll
+    const y = point.x * sinRoll + leanedY * cosRoll
+
+    return { x: center.x + x * scale, y: center.y + y * scale, z: leanedZ * scale }
   })
+}
+
+/** The same hand as the camera would flatten it — depth thrown away. */
+export function flatten(landmarks: Landmarks): Landmarks {
+  return landmarks.map((point) => ({ x: point.x, y: point.y, z: 0 }))
 }
 
 export const GESTURES = {

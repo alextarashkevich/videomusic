@@ -1,17 +1,38 @@
 import type { Config } from '../config'
-import type { FingerMask, Landmarks } from '../types'
+import type { FingerMask, Landmark, Landmarks } from '../types'
 import { FINGER_BIT, HINGED_FINGERS, LANDMARK } from './landmarks'
 
-type Point = { x: number; y: number }
+/**
+ * Distance in three dimensions.
+ *
+ * These measurements run on MediaPipe's world landmarks, where depth is real. Measuring
+ * shape in the flat image instead means a hand turned away from the camera has its
+ * fingers foreshortened — a fully extended finger projects short and reads as folded,
+ * which is precisely why tilting the hand broke recognition.
+ */
+function distance(a: Landmark, b: Landmark): number {
+  return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z)
+}
 
-function distance(a: Point, b: Point): number {
-  return Math.hypot(a.x - b.x, a.y - b.y)
+/** Angle between two points as seen from a third, in degrees. */
+function angleAt(origin: Landmark, a: Landmark, b: Landmark): number {
+  const ax = a.x - origin.x
+  const ay = a.y - origin.y
+  const az = a.z - origin.z
+  const bx = b.x - origin.x
+  const by = b.y - origin.y
+  const bz = b.z - origin.z
+
+  const lengths = Math.hypot(ax, ay, az) * Math.hypot(bx, by, bz)
+  if (lengths === 0) return 0
+
+  const cosine = (ax * bx + ay * by + az * bz) / lengths
+  return (Math.acos(Math.min(1, Math.max(-1, cosine))) * 180) / Math.PI
 }
 
 /**
  * Wrist to middle knuckle — the reference length every other measurement is divided by.
- * Working in these units is what makes thresholds independent of how far the hand is
- * from the camera.
+ * Working in these units is what makes thresholds independent of hand size.
  */
 export function handScale(landmarks: Landmarks): number {
   const wrist = landmarks[LANDMARK.WRIST]
@@ -21,29 +42,12 @@ export function handScale(landmarks: Landmarks): number {
 }
 
 /**
- * Works out which fingers are extended, as a 5-bit mask.
+ * The raw numbers the mask is derived from, exposed so the readout can show them.
  *
- * The obvious test — is the fingertip above the knuckle — falls apart the moment the
- * hand rotates, and rotation is a control here rather than an accident. So everything is
- * measured as distances within the hand, divided by the wrist-to-middle-knuckle span,
- * which survives both rotation and distance from the camera.
- *
- * A finger counts as extended when its tip has reached far enough from *its own knuckle*.
- * Comparing against the middle joint instead is tempting and worse: curling a finger
- * pushes that joint outward, so it chases the tip and narrows the gap between open and
- * closed to almost nothing — which is what made one finger and two hard to tell apart.
- * The knuckle is fixed to the palm and does not move at all.
- *
- * The thumb folds across a different axis than the other four, so it gets its own test:
- * how far its tip sits from the pinky knuckle. Tucked across the palm that distance
- * collapses; held out to the side it roughly doubles.
- */
-/**
- * How far each fingertip has reached away from its own knuckle, in hand widths.
- *
- * This is the raw measurement the mask is derived from, exposed so the readout can show
- * it: holding up one finger and then two and reading the numbers tells you exactly where
- * the threshold belongs, which is worth more than any amount of guessing at it.
+ * Four fingers report reach — how far the tip has come from its own knuckle, in hand
+ * widths. The thumb reports its angle in degrees, because it does not curl like the
+ * others. Holding up one gesture and then another and reading these tells you exactly
+ * where a threshold belongs, which beats guessing at it.
  */
 export function fingerReach(landmarks: Landmarks): Record<string, number> {
   const scale = handScale(landmarks)
@@ -57,15 +61,42 @@ export function fingerReach(landmarks: Landmarks): Record<string, number> {
     reach[finger.name] = distance(mcp, tip) / scale
   }
 
-  const thumbTip = landmarks[LANDMARK.THUMB_TIP]
-  const pinkyMcp = landmarks[LANDMARK.PINKY_MCP]
-  if (thumbTip !== undefined && pinkyMcp !== undefined) {
-    reach['thumb'] = distance(thumbTip, pinkyMcp) / scale
-  }
-
+  reach['thumb'] = thumbAngle(landmarks)
   return reach
 }
 
+/**
+ * How far the thumb is swung away from the line of the palm, in degrees.
+ *
+ * The old test measured how far the thumb tip sat from the pinky knuckle, which fails in
+ * two ways: it moves with how spread the other fingers are, and it shrinks under
+ * perspective. An angle between two directions on the same hand does neither — it is
+ * unchanged by rotation, by hand size, and by what the rest of the fingers are doing.
+ */
+export function thumbAngle(landmarks: Landmarks): number {
+  const wrist = landmarks[LANDMARK.WRIST]
+  const middle = landmarks[LANDMARK.MIDDLE_MCP]
+  const thumbTip = landmarks[LANDMARK.THUMB_TIP]
+  if (wrist === undefined || middle === undefined || thumbTip === undefined) return 0
+
+  return angleAt(wrist, middle, thumbTip)
+}
+
+/**
+ * Works out which fingers are extended, as a 5-bit mask.
+ *
+ * Everything is measured as distances and angles within the hand itself, so the result
+ * survives rotation, hand size and distance from the camera.
+ *
+ * A finger counts as extended when its tip has reached far enough from *its own knuckle*.
+ * Comparing against the middle joint instead is tempting and worse: curling a finger
+ * pushes that joint outward, so it chases the tip and narrows the gap between open and
+ * closed to almost nothing — which is what made one finger and two hard to tell apart.
+ * The knuckle is fixed to the palm and does not move at all.
+ *
+ * Feed this the *world* landmarks. In the flat image a hand turned away from the camera
+ * has its fingers foreshortened, and they read as folded when they are not.
+ */
 export function fingerMask(landmarks: Landmarks, config: Config): FingerMask {
   const scale = handScale(landmarks)
   if (scale === 0) return 0
@@ -81,12 +112,8 @@ export function fingerMask(landmarks: Landmarks, config: Config): FingerMask {
     }
   }
 
-  const thumbTip = landmarks[LANDMARK.THUMB_TIP]
-  const pinkyMcp = landmarks[LANDMARK.PINKY_MCP]
-  if (thumbTip !== undefined && pinkyMcp !== undefined) {
-    if (distance(thumbTip, pinkyMcp) > scale * config.gesture.thumbSpread) {
-      mask |= FINGER_BIT.THUMB
-    }
+  if (thumbAngle(landmarks) > config.gesture.thumbAngleDeg) {
+    mask |= FINGER_BIT.THUMB
   }
 
   return mask

@@ -113,9 +113,17 @@ each fingertip is from its own knuckle, which is the number the extension thresh
 compared against. Hold up one finger, then two, and read both rows: the threshold belongs
 between them. That beats guessing at it.
 
+The thumb has its own row, in degrees: how far it is swung off the line of the palm.
+That is what separates an open palm from four fingers, and коза from коза with the thumb.
+
 **Stability** is the speed/accuracy trade. Lower it and the instrument answers sooner;
 lower it too far and shapes your fingers pass through on the way somewhere else start
 sounding.
+
+**Depth-aware shape** reads the hand from the tracker's 3D output rather than the flat
+image, so turning your hand away from the camera cannot shorten a finger into reading as
+folded. The depth estimate is the noisiest thing the tracker produces, so if recognition
+gets jumpier rather than steadier, turn it off.
 
 ## Privacy
 
