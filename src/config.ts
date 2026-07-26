@@ -18,6 +18,10 @@ export type Config = {
     /** Frames a new hand shape must persist before it takes effect. At ~30 fps this is
      *  the delay between moving your fingers and hearing it. */
     stabilityFrames: number
+    /** Frames the right hand may go missing before the sound fades out. Tracking drops
+     *  the odd frame; without this tolerance those blink through as dropouts. This is a
+     *  safety net, not the gate — the gate is the left fist. */
+    handLostFrames: number
   }
   quality: {
     /** Below this tilt the chord is major. */
@@ -64,8 +68,9 @@ export type Config = {
 export const defaultConfig: Config = {
   gesture: {
     extendedRatio: 1.12,
-    thumbSpread: 1.05,
+    thumbSpread: 1.0,
     stabilityFrames: 3,
+    handLostFrames: 8,
   },
   quality: {
     majorBelowDeg: 20,

@@ -1,5 +1,8 @@
 import './style.css'
 import { loadConfig } from './config'
+import { describeMask } from './gesture/fingers'
+import { createInterpreter } from './gesture/interpret'
+import type { PerformanceState } from './types'
 import { startCamera } from './vision/camera'
 import { createHandTracker } from './vision/handTracker'
 import { createOverlay } from './visual/overlay'
@@ -12,6 +15,13 @@ const startError = document.querySelector<HTMLParagraphElement>('#start-error')!
 const hud = document.querySelector<HTMLDivElement>('#hud')!
 
 const config = loadConfig()
+
+const ROMAN = ['—', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII'] as const
+
+function bar(value: number, width = 12): string {
+  const filled = Math.round(value * width)
+  return '█'.repeat(filled) + '░'.repeat(width - filled)
+}
 
 function showError(message: string): void {
   startError.textContent = message
@@ -28,13 +38,30 @@ async function start(): Promise<void> {
   const camera = await startCamera(video)
   const tracker = await createHandTracker(config)
   const overlay = createOverlay(overlayCanvas, camera.video)
+  const interpreter = createInterpreter(config)
 
   startScreen.hidden = true
 
-  // Smoothed so the readout is legible rather than twitching every frame.
   let fps = 0
   let detectMs = 0
   let previous = performance.now()
+
+  function render(state: PerformanceState): void {
+    const { rightMask, leftMask, rightTilt, leftTilt } = interpreter.debug
+
+    hud.textContent = [
+      `fps ${fps.toFixed(0).padStart(3)}   detect ${detectMs.toFixed(1).padStart(5)} ms`,
+      '',
+      `RIGHT  ${rightMask === null ? '  —  ' : describeMask(rightMask)}   ${rightTilt.toFixed(0).padStart(3)}°`,
+      `       ${ROMAN[state.degree ?? 0]} ${state.quality}`,
+      '',
+      `LEFT   ${leftMask === null ? '  —  ' : describeMask(leftMask)}   ${leftTilt.toFixed(0).padStart(3)}°`,
+      `       ${state.gate ? 'sound' : 'muted'}   density ${state.density}`,
+      '',
+      `dist   ${bar(state.distortion)} ${(state.distortion * 100).toFixed(0).padStart(3)}%`,
+      `vol    ${bar(state.volume)} ${(state.volume * 100).toFixed(0).padStart(3)}%`,
+    ].join('\n')
+  }
 
   function loop(now: number): void {
     const delta = now - previous
@@ -45,14 +72,10 @@ async function start(): Promise<void> {
     const frame = tracker.detect(camera.video, now)
     detectMs += (performance.now() - before - detectMs) * 0.1
 
-    overlay.draw(frame)
+    const state = interpreter.update(frame)
 
-    hud.textContent = [
-      `fps      ${fps.toFixed(0).padStart(3)}`,
-      `detect   ${detectMs.toFixed(1).padStart(5)} ms`,
-      `right    ${frame.right === null ? '—' : frame.right.score.toFixed(2)}`,
-      `left     ${frame.left === null ? '—' : frame.left.score.toFixed(2)}`,
-    ].join('\n')
+    overlay.draw(frame)
+    render(state)
 
     requestAnimationFrame(loop)
   }
