@@ -3,6 +3,12 @@ dist/
 .DS_Store
 *.local
 
+# ~22 MB of MediaPipe wasm, copied out of node_modules by scripts/copy-wasm.mjs on every
+# build. Too big to commit, and package-lock already pins which version it comes from.
+# The model in public/models/ IS committed — it is not in any npm package, and shipping
+# the exact bytes we tested beats re-downloading it from Google on every CI run.
+public/mediapipe/
+
 # There are no secrets in this project and there is no way to hide one in a static
 # site — Vite inlines import.meta.env into the bundle at build time. If a feature ever
 # needs a key, that means adding a backend, not adding a .env file.
