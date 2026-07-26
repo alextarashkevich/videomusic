@@ -1,4 +1,6 @@
 import './style.css'
+import { createAudioEngine } from './audio/engine'
+import { chordNotes } from './audio/voicing'
 import { loadConfig } from './config'
 import { describeMask } from './gesture/fingers'
 import { createInterpreter } from './gesture/interpret'
@@ -35,6 +37,10 @@ async function start(): Promise<void> {
   startButton.textContent = 'Starting…'
   startError.hidden = true
 
+  // Audio first: the AudioContext may only start inside the click that triggered this,
+  // and awaiting the camera before it would lose that permission.
+  const audio = await createAudioEngine(config)
+  await audio.resume()
   const camera = await startCamera(video)
   const tracker = await createHandTracker(config)
   const overlay = createOverlay(overlayCanvas, camera.video)
@@ -48,6 +54,8 @@ async function start(): Promise<void> {
 
   function render(state: PerformanceState): void {
     const { rightMask, leftMask, rightTilt, leftTilt } = interpreter.debug
+    const chord =
+      state.degree === null ? '—' : chordNotes(state.degree, state.quality, state.density, config).join(' ')
 
     hud.textContent = [
       `fps ${fps.toFixed(0).padStart(3)}   detect ${detectMs.toFixed(1).padStart(5)} ms`,
@@ -60,6 +68,8 @@ async function start(): Promise<void> {
       '',
       `dist   ${bar(state.distortion)} ${(state.distortion * 100).toFixed(0).padStart(3)}%`,
       `vol    ${bar(state.volume)} ${(state.volume * 100).toFixed(0).padStart(3)}%`,
+      '',
+      `chord  ${chord}`,
     ].join('\n')
   }
 
@@ -73,6 +83,7 @@ async function start(): Promise<void> {
     detectMs += (performance.now() - before - detectMs) * 0.1
 
     const state = interpreter.update(frame)
+    audio.update(state)
 
     overlay.draw(frame)
     render(state)
