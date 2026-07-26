@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Gesture Synth</title>
+    <meta
+      name="description"
+      content="A browser instrument played with hand gestures. Everything runs on your device."
+    />
+  </head>
+  <body>
+    <div id="app">
+      <!-- Camera feed, mirrored. Never leaves the device. -->
+      <video id="video" playsinline muted></video>
+
+      <!-- Audio-reactive shader background (milestone 6). -->
+      <canvas id="scene"></canvas>
+
+      <!-- Hand skeleton + debug HUD. -->
+      <canvas id="overlay"></canvas>
+
+      <div id="hud"></div>
+
+      <div id="start-screen">
+        <h1>Gesture Synth</h1>
+        <p class="tagline">
+          Right hand picks the chord. Left hand shapes it.<br />
+          Camera stays on your device — nothing is uploaded.
+        </p>
+        <button id="start-button" type="button">Start</button>
+        <p id="start-error" hidden></p>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
