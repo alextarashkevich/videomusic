@@ -5,6 +5,7 @@ import { loadConfig } from './config'
 import { describeMask } from './gesture/fingers'
 import { createInterpreter } from './gesture/interpret'
 import type { PerformanceState } from './types'
+import { createTuningPanel } from './ui/tuning'
 import { startCamera } from './vision/camera'
 import { createHandTracker } from './vision/handTracker'
 import { createOverlay } from './visual/overlay'
@@ -46,6 +47,10 @@ async function start(): Promise<void> {
   const overlay = createOverlay(overlayCanvas, camera.video)
   const interpreter = createInterpreter(config)
 
+  // Mutates config in place; the interpreter and engine both re-read it every frame, so
+  // changes are audible as they are dragged.
+  createTuningPanel(config)
+
   startScreen.hidden = true
 
   let fps = 0
@@ -70,6 +75,8 @@ async function start(): Promise<void> {
       `vol    ${bar(state.volume)} ${(state.volume * 100).toFixed(0).padStart(3)}%`,
       '',
       `chord  ${chord}`,
+      '',
+      'press T to tune',
     ].join('\n')
   }
 
