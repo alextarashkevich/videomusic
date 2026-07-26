@@ -1,6 +1,6 @@
 import type { Config } from '../config'
 import type { Density, FingerMask, HandFrame, PerformanceState, ScaleDegree } from '../types'
-import { distortionAmount, heightFraction, tiltMagnitude } from './angles'
+import { distortionAmount, tiltMagnitude, volumeLevel } from './angles'
 import { fingerMask } from './fingers'
 import { FINGER_BIT } from './landmarks'
 import { createLatch, createSmoother, createStabilizer } from './stabilizer'
@@ -44,7 +44,16 @@ export type InterpreterDebug = {
 }
 
 export type Interpreter = {
-  update: (frame: HandFrame) => PerformanceState
+  /**
+   * Advances the instrument by one camera frame.
+   *
+   * `fresh` says whether this is a new observation. The render loop runs at 60 Hz while
+   * the camera delivers about 30, so roughly every other call is the same frame seen
+   * twice — and counting a repeat toward the stability requirement is not evidence the
+   * shape persisted, it is the same evidence counted twice. Stale frames return the last
+   * state untouched.
+   */
+  update: (frame: HandFrame, fresh?: boolean) => PerformanceState
   readonly debug: InterpreterDebug
   reset: () => void
 }
@@ -65,6 +74,14 @@ export function createInterpreter(config: Config): Interpreter {
   const volume = createSmoother(0.7)
 
   let rightLostFrames = 0
+  let last: PerformanceState = {
+    gate: true,
+    degree: null,
+    quality: 'major',
+    density: 3,
+    distortion: 0,
+    volume: 0.7,
+  }
 
   const debug: InterpreterDebug = {
     rightMask: null,
@@ -77,7 +94,9 @@ export function createInterpreter(config: Config): Interpreter {
   return {
     debug,
 
-    update(frame) {
+    update(frame, fresh = true) {
+      if (!fresh) return last
+
       const { stabilityFrames, handLostFrames } = config.gesture
 
       if (frame.right !== null) {
@@ -110,7 +129,7 @@ export function createInterpreter(config: Config): Interpreter {
         gate.push(mask === FIST ? false : voicing !== null ? true : null, stabilityFrames)
 
         distortion.push(distortionAmount(frame.left.landmarks, config), config.smoothing.alpha)
-        volume.push(heightFraction(frame.left.landmarks, config), config.smoothing.alpha)
+        volume.push(volumeLevel(frame.left.landmarks, config), config.smoothing.alpha)
       } else {
         debug.leftMask = null
         // Its readings are held rather than reset — a hand that drops out for a moment
@@ -123,7 +142,7 @@ export function createInterpreter(config: Config): Interpreter {
       // a safety net for walking away, not the gate — the gate is the left fist.
       const rightPresent = rightLostFrames < handLostFrames
 
-      return {
+      last = {
         gate: rightPresent && (gate.value ?? true),
         degree: degree.value,
         quality: minor.value ? 'minor' : 'major',
@@ -131,6 +150,7 @@ export function createInterpreter(config: Config): Interpreter {
         distortion: distortion.value,
         volume: volume.value,
       }
+      return last
     },
 
     reset() {

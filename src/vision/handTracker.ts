@@ -2,10 +2,18 @@ import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision'
 import type { Config } from '../config'
 import type { Hand, HandFrame } from '../types'
 
+export type Detection = {
+  frame: HandFrame
+  /** False when the camera has not produced a new picture since the last call, so this
+   *  is the previous result handed back rather than a fresh observation. Callers holding
+   *  per-frame state must not advance it on a repeat. */
+  fresh: boolean
+}
+
 export type HandTracker = {
-  /** Runs synchronously. Returns the previous frame's result if the video has not
-   *  advanced, so calling this faster than the camera produces frames costs nothing. */
-  detect: (video: HTMLVideoElement, timestampMs: number) => HandFrame
+  /** Runs synchronously. Re-uses the previous result if the video has not advanced, so
+   *  calling this faster than the camera produces frames costs nothing. */
+  detect: (video: HTMLVideoElement, timestampMs: number) => Detection
   close: () => void
 }
 
@@ -35,12 +43,12 @@ export async function createHandTracker(config: Config): Promise<HandTracker> {
 
   return {
     detect(video, timestampMs) {
-      if (video.currentTime === lastVideoTime) return lastFrame
+      if (video.currentTime === lastVideoTime) return { frame: lastFrame, fresh: false }
       lastVideoTime = video.currentTime
 
       const result = landmarker.detectForVideo(video, timestampMs)
-      lastFrame = route(result)
-      return lastFrame
+      lastFrame = route(result, config.vision.swapHands)
+      return { frame: lastFrame, fresh: true }
     },
 
     close() {
@@ -49,21 +57,29 @@ export async function createHandTracker(config: Config): Promise<HandTracker> {
   }
 }
 
-type Detection = { hand: Hand; label: string; x: number }
+type Routed = { hand: Hand; label: string; x: number }
 
 /**
  * Assigns detections to the user's left and right hands.
  *
- * MediaPipe labels handedness *assuming the input image is mirrored*, the way a selfie
- * camera shows you. We feed it the raw camera stream — CSS mirrors only the display —
- * so every label arrives inverted and has to be flipped back.
+ * MediaPipe documents that it labels handedness *assuming the input image is mirrored*,
+ * the way a selfie camera shows you, and we feed it the raw camera stream — CSS mirrors
+ * only the display. That reasoning says every label arrives inverted. In practice it
+ * does not: playing the thing showed the labels already matching the physical hands, and
+ * inverting them put chords on the wrong hand.
  *
- * When both detections carry the same label, which MediaPipe does occasionally emit,
- * the labels are useless and we fall back to screen position: in the raw image the
- * user's right hand is the one further left.
+ * So the labels are taken at face value and `swapHands` exists to flip them. Which way
+ * round this lands appears to depend on the browser and the camera, and one setting is
+ * worth more than a confident derivation that the instrument disagrees with.
+ *
+ * When both detections carry the same label, which MediaPipe does occasionally emit, the
+ * labels are useless and screen position decides instead.
  */
-function route(result: { landmarks: unknown[]; handedness: unknown[] }): HandFrame {
-  const detections: Detection[] = []
+function route(
+  result: { landmarks: unknown[]; handedness: unknown[] },
+  swap: boolean,
+): HandFrame {
+  const detections: Routed[] = []
 
   for (let i = 0; i < result.landmarks.length; i++) {
     const landmarks = result.landmarks[i] as Hand['landmarks']
@@ -84,18 +100,21 @@ function route(result: { landmarks: unknown[]; handedness: unknown[] }): HandFra
   if (detections.length === 0) return EMPTY
 
   if (detections.length === 2) {
-    const [a, b] = detections as [Detection, Detection]
+    const [a, b] = detections as [Routed, Routed]
     if (a.label === b.label) {
+      // Landmark x runs left to right across the raw, unmirrored image.
       const [leftmost, rightmost] = a.x <= b.x ? [a, b] : [b, a]
-      return { right: leftmost.hand, left: rightmost.hand }
+      return swap
+        ? { left: leftmost.hand, right: rightmost.hand }
+        : { right: leftmost.hand, left: rightmost.hand }
     }
   }
 
   const frame: HandFrame = { left: null, right: null }
   for (const detection of detections) {
-    // The inversion described above.
-    if (detection.label === 'Left') frame.right = detection.hand
-    else frame.left = detection.hand
+    const isLeft = (detection.label === 'Left') !== swap
+    if (isLeft) frame.left = detection.hand
+    else frame.right = detection.hand
   }
   return frame
 }

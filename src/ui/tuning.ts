@@ -1,8 +1,13 @@
+import { PRESETS } from '../audio/presets'
 import { clearConfig, defaultConfig, saveConfig, type Config } from '../config'
 import { CONTROLS, ROOT_OPTIONS, SCALE_OPTIONS, type Control } from './controls'
 
 export type TuningPanel = {
   toggle: () => void
+  readonly open: boolean
+  /** Fires whenever the panel opens or closes, so whatever shares the right-hand side
+   *  of the screen can get out of the way. */
+  onToggle: (listener: (open: boolean) => void) => void
   dispose: () => void
 }
 
@@ -28,6 +33,24 @@ export function createTuningPanel(config: Config): TuningPanel {
   panel.append(body)
 
   const refreshers: (() => void)[] = []
+
+  body.append(makeHeading('Sound'))
+  refreshers.push(addPresetSelect(body, config))
+
+  body.append(makeHeading('Hands'))
+  refreshers.push(
+    addToggle(
+      body,
+      'Swap hands',
+      'Which physical hand chooses chords. Flip this if the wrong hand is playing notes — which way round the tracker reports handedness is not the same on every browser and camera.',
+      config,
+      (c) => c.vision.swapHands,
+      (c, value) => {
+        c.vision.swapHands = value
+      },
+    ),
+  )
+
   let currentGroup = ''
 
   for (const control of CONTROLS) {
@@ -60,18 +83,27 @@ export function createTuningPanel(config: Config): TuningPanel {
 
   document.body.append(panel)
 
+  const listeners: ((open: boolean) => void)[] = []
+
+  function setOpen(open: boolean): void {
+    panel.hidden = !open
+    for (const listener of listeners) listener(open)
+  }
+
   function onKey(event: KeyboardEvent): void {
     if (event.key.toLowerCase() !== 't') return
     if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) return
-    panel.hidden = !panel.hidden
+    setOpen(panel.hidden)
   }
 
   window.addEventListener('keydown', onKey)
 
   return {
-    toggle: () => {
-      panel.hidden = !panel.hidden
+    get open() {
+      return !panel.hidden
     },
+    toggle: () => setOpen(panel.hidden),
+    onToggle: (listener) => listeners.push(listener),
     dispose: () => {
       window.removeEventListener('keydown', onKey)
       panel.remove()
@@ -83,6 +115,82 @@ function makeHeading(text: string): HTMLElement {
   const heading = document.createElement('h2')
   heading.textContent = text
   return heading
+}
+
+function addPresetSelect(parent: HTMLElement, config: Config): () => void {
+  const row = document.createElement('label')
+  row.className = 'tuning-row'
+
+  const name = document.createElement('span')
+  name.className = 'tuning-label'
+  name.textContent = 'Synth'
+
+  const select = document.createElement('select')
+  for (const preset of PRESETS) {
+    const option = document.createElement('option')
+    option.value = preset.name
+    option.textContent = preset.name
+    option.title = preset.hint
+    select.append(option)
+  }
+
+  const hint = document.createElement('span')
+  hint.className = 'tuning-hint'
+
+  const showHint = () => {
+    hint.textContent = PRESETS.find((p) => p.name === select.value)?.hint ?? ''
+  }
+
+  select.addEventListener('change', () => {
+    // main.ts watches this and tells the engine — the panel stays free of audio.
+    config.sound.preset = select.value
+    showHint()
+    saveConfig(config)
+  })
+
+  const refresh = () => {
+    select.value = config.sound.preset
+    showHint()
+  }
+
+  refresh()
+  row.append(name, select, hint)
+  parent.append(row)
+  return refresh
+}
+
+function addToggle(
+  parent: HTMLElement,
+  label: string,
+  hint: string,
+  config: Config,
+  get: (config: Config) => boolean,
+  set: (config: Config, value: boolean) => void,
+): () => void {
+  const row = document.createElement('label')
+  row.className = 'tuning-row'
+  row.title = hint
+
+  const name = document.createElement('span')
+  name.className = 'tuning-label'
+  name.textContent = label
+
+  const input = document.createElement('input')
+  input.type = 'checkbox'
+
+  input.addEventListener('change', () => {
+    set(config, input.checked)
+    saveConfig(config)
+  })
+
+  const refresh = () => {
+    input.checked = get(config)
+  }
+
+  refresh()
+  row.append(name, input)
+  parent.append(row)
+  return refresh
 }
 
 function addSlider(parent: HTMLElement, config: Config, control: Control): () => void {

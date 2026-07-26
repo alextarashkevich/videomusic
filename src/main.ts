@@ -1,10 +1,12 @@
 import './style.css'
 import { createAudioEngine, type AudioEngine } from './audio/engine'
-import { chordNotes } from './audio/voicing'
-import { loadConfig } from './config'
+import { PRESETS } from './audio/presets'
+import { chordLabel } from './audio/voicing'
+import { loadConfig, saveConfig } from './config'
 import { describeMask } from './gesture/fingers'
 import { createInterpreter } from './gesture/interpret'
 import type { PerformanceState } from './types'
+import { createSongGuide } from './ui/songGuide'
 import { createTuningPanel } from './ui/tuning'
 import { startCamera } from './vision/camera'
 import { createHandTracker } from './vision/handTracker'
@@ -65,7 +67,11 @@ async function start(): Promise<void> {
 
   // Mutates config in place; the interpreter and engine both re-read it every frame, so
   // changes are audible as they are dragged.
-  createTuningPanel(config)
+  const tuning = createTuningPanel(config)
+  const guide = createSongGuide(config)
+
+  // Both live on the right-hand side, and you do not need a song while dragging sliders.
+  tuning.onToggle((open) => guide.setVisible(!open))
 
   startScreen.hidden = true
 
@@ -76,6 +82,25 @@ async function start(): Promise<void> {
 
   window.addEventListener('keydown', (event) => {
     if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) return
+
+    if (event.key === 'G') {
+      guide.toggle()
+      guide.setVisible(!tuning.open)
+      return
+    }
+    if (event.key === 'g') {
+      guide.next()
+      return
+    }
+
+    // Number keys pick a synth. The engine picks the change up from config.
+    const preset = PRESETS[Number(event.key) - 1]
+    if (preset !== undefined) {
+      config.sound.preset = preset.name
+      saveConfig(config)
+      return
+    }
+
     const key = event.key.toLowerCase()
     if (key === 'h') {
       showHud = !showHud
@@ -91,23 +116,24 @@ async function start(): Promise<void> {
   function render(state: PerformanceState): void {
     const { rightMask, leftMask, rightTilt, leftTilt } = interpreter.debug
     const chord =
-      state.degree === null ? '—' : chordNotes(state.degree, state.quality, state.density, config).join(' ')
+      state.degree === null ? '—' : chordLabel(state.degree, state.quality, state.density, config)
 
     hud.textContent = [
       `fps ${fps.toFixed(0).padStart(3)}   detect ${detectMs.toFixed(1).padStart(5)} ms`,
       '',
       `RIGHT  ${rightMask === null ? '  —  ' : describeMask(rightMask)}   ${rightTilt.toFixed(0).padStart(3)}°`,
-      `       ${ROMAN[state.degree ?? 0]} ${state.quality}`,
+      `       ${ROMAN[state.degree ?? 0]} ${state.quality}   ${chord}`,
       '',
       `LEFT   ${leftMask === null ? '  —  ' : describeMask(leftMask)}   ${leftTilt.toFixed(0).padStart(3)}°`,
-      `       ${state.gate ? 'sound' : 'muted'}   density ${state.density}`,
+      `       ${state.gate ? 'sound' : 'muted'}   ${['', 'triad', '+octave', '7th'][state.density]}`,
       '',
       `dist   ${bar(state.distortion)} ${(state.distortion * 100).toFixed(0).padStart(3)}%`,
       `vol    ${bar(state.volume)} ${(state.volume * 100).toFixed(0).padStart(3)}%`,
       '',
-      `chord  ${chord}`,
+      `synth  ${engine.preset}`,
       '',
-      'T tune · H hide · S skeleton',
+      'T tune · G songs · 1-5 synth',
+      'H hide · S skeleton',
     ].join('\n')
   }
 
@@ -117,12 +143,17 @@ async function start(): Promise<void> {
     if (delta > 0) fps += (1000 / delta - fps) * 0.1
 
     const before = performance.now()
-    const frame = tracker.detect(camera.video, now)
-    detectMs += (performance.now() - before - detectMs) * 0.1
+    const { frame, fresh } = tracker.detect(camera.video, now)
+    if (fresh) detectMs += (performance.now() - before - detectMs) * 0.1
 
-    const state = interpreter.update(frame)
+    // The tuning panel and the number keys both write the preset into config; picking it
+    // up here keeps the UI from having to know about the audio graph.
+    if (config.sound.preset !== engine.preset) engine.setPreset(config.sound.preset)
+
+    const state = interpreter.update(frame, fresh)
     engine.update(state)
 
+    guide.update(state, delta)
     visualizer.update(state, engine.getLevel(), now)
 
     if (showSkeleton) overlay.draw(frame)

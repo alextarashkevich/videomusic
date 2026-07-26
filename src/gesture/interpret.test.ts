@@ -141,13 +141,31 @@ describe('left hand shapes the sound', () => {
   })
 
   it('raises volume as the hand rises', () => {
-    const low = hold({ right: hand(GESTURES.one), left: openLeft({ center: { x: 0.3, y: 0.8 } }) }, 60)
+    const atBottom = openLeft({ center: { x: 0.3, y: config.volume.bottomY } })
+    const atTop = openLeft({ center: { x: 0.3, y: config.volume.topY } })
+
+    const low = hold({ right: hand(GESTURES.one), left: atBottom }, 60)
     interpreter.reset()
-    const high = hold({ right: hand(GESTURES.one), left: openLeft({ center: { x: 0.3, y: 0.2 } }) }, 60)
+    const high = hold({ right: hand(GESTURES.one), left: atTop }, 60)
 
     expect(high.volume).toBeGreaterThan(low.volume)
-    expect(low.volume).toBeLessThan(0.15)
-    expect(high.volume).toBeGreaterThan(0.85)
+    expect(high.volume).toBeCloseTo(1, 2)
+  })
+
+  // Dropping the hand should thin the sound out, not end it. Silence is the fist —
+  // a deliberate gesture you can hold — and a hand that strays low is not that.
+  it('never falls below the floor, however low the hand goes', () => {
+    const belowFrame = openLeft({ center: { x: 0.3, y: 1.4 } })
+    const state = hold({ right: hand(GESTURES.one), left: belowFrame }, 60)
+
+    expect(state.volume).toBeCloseTo(config.volume.floor, 3)
+    expect(state.volume).toBeGreaterThan(0)
+    expect(state.gate).toBe(true)
+  })
+
+  it('still reaches true silence through the fist', () => {
+    const state = hold({ right: hand(GESTURES.one), left: hand(GESTURES.fist) })
+    expect(state.gate).toBe(false)
   })
 
   it('raises distortion as the hand tilts', () => {
@@ -217,6 +235,48 @@ describe('missing hands', () => {
     expect(state.degree).toBeNull()
     expect(state.density).toBe(3)
     expect(state.volume).toBeGreaterThan(0)
+  })
+})
+
+// The render loop runs at 60 Hz while the camera delivers about 30, so roughly every
+// other call hands back the same picture. Counting a repeat toward the stability
+// requirement is the same evidence counted twice, and it made the gate half as strong
+// as it was configured to be.
+describe('repeated camera frames', () => {
+  it('does not let a repeat count toward the stability requirement', () => {
+    const frame = { right: hand(GESTURES.koza), left: openLeft() }
+
+    for (let i = 0; i < 20; i++) interpreter.update(frame, false)
+    expect(interpreter.update(frame, false).degree).toBeNull()
+  })
+
+  it('needs the configured number of genuinely new frames', () => {
+    const frame = { right: hand(GESTURES.koza), left: openLeft() }
+
+    for (let i = 0; i < config.gesture.stabilityFrames - 1; i++) {
+      interpreter.update(frame, true)
+      interpreter.update(frame, false)
+      interpreter.update(frame, false)
+    }
+    expect(interpreter.debug.rightMask).not.toBeNull()
+
+    const state = interpreter.update(frame, true)
+    expect(state.degree).toBe(6)
+  })
+
+  it('hands back the previous state unchanged on a repeat', () => {
+    const before = hold({ right: hand(GESTURES.one), left: openLeft() })
+    const repeated = interpreter.update({ right: null, left: null }, false)
+    expect(repeated).toEqual(before)
+  })
+
+  it('does not let repeats age out a hand that has gone missing', () => {
+    hold({ right: hand(GESTURES.koza), left: openLeft() })
+
+    for (let i = 0; i < config.gesture.handLostFrames * 4; i++) {
+      interpreter.update({ right: null, left: openLeft() }, false)
+    }
+    expect(interpreter.update({ right: null, left: openLeft() }, false).gate).toBe(true)
   })
 })
 

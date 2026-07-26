@@ -52,6 +52,19 @@ export function heightFraction(landmarks: Landmarks, config: Config): number {
   return clamp01((bottomY - wrist.y) / (bottomY - topY))
 }
 
+/**
+ * Playing level for the left hand: its height across the band, lifted so the bottom is
+ * quiet rather than silent.
+ *
+ * Dropping your hand should thin the sound out, not end it. Silence is the fist — a
+ * deliberate gesture you can hold — and giving the bottom of the frame the same power
+ * makes the instrument cut out whenever a hand strays low.
+ */
+export function volumeLevel(landmarks: Landmarks, config: Config): number {
+  const { floor } = config.volume
+  return floor + (1 - floor) * heightFraction(landmarks, config)
+}
+
 /** Maps tilt onto 0..1 across the configured range. */
 export function distortionAmount(landmarks: Landmarks, config: Config): number {
   const { minDeg, maxDeg } = config.distortion

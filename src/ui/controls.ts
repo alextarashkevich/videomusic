@@ -155,6 +155,20 @@ export const CONTROLS: readonly Control[] = [
   },
 
   {
+    group: 'Volume',
+    label: 'Quietest level',
+    min: 0,
+    max: 0.5,
+    step: 0.01,
+    format: (value) => `${(value * 100).toFixed(0)}%`,
+    get: (c) => c.volume.floor,
+    set: (c, v) => {
+      c.volume.floor = v
+    },
+    hint: 'How loud the instrument still is with the hand at the bottom. Above zero so dropping your hand thins the sound rather than ending it — silence is the fist.',
+  },
+
+  {
     group: 'Feel',
     label: 'Control smoothing',
     min: 0.02,

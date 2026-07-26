@@ -30,24 +30,70 @@ Rotating the wrist switches the chord between **major** (upright) and **minor** 
 | Gesture | Effect |
 | --- | --- |
 | fist | mute, fading smoothly |
-| 1 finger | single note |
-| 2 fingers | note + octave |
-| 3 fingers | full triad |
+| 1 finger | triad |
+| 2 fingers | triad + octave |
+| 3 fingers | seventh chord |
 
-Tilting the wrist drives **distortion**. Raising and lowering the hand sets **volume**.
+Every setting is a chord, and every one contains the third — which is what the wrist tilt
+changes, so major and minor are audible whatever the left hand is doing.
+
+Tilting the left wrist drives **distortion**. Raising and lowering the hand sets
+**volume**, down to a floor rather than to nothing: dropping your hand thins the sound
+out, and silence belongs to the fist.
 
 An unrecognised hand shape holds whatever was playing, so rearranging your fingers never
 produces a stray note.
+
+Which physical hand does which job depends on your browser and camera. If the wrong hand
+is choosing chords, turn on **Swap hands** in the tuning panel.
+
+### Inversions
+
+Chords are voiced by moving each voice to the nearest note of the next chord rather than
+stacking every one from its root. Going from C to Am, the voices already holding C and E
+stay where they are and only one moves — which is what stops a progression marching
+around the keyboard in parallel blocks.
 
 ## Keys
 
 | Key | |
 | --- | --- |
 | `T` | tuning panel — every threshold, adjustable while playing |
+| `⇧G` | show or hide the song guide |
+| `G` | next song |
+| `1`–`5` | synth: Organ, Warm pad, Rock organ, Strings, Glass |
 | `H` | hide the readout |
 | `S` | hide the hand skeleton |
 
 `H` and `S` together leave just the instrument and the shader, for filming.
+
+## Songs
+
+The guide follows you rather than a clock: play the highlighted chord, hold it for a
+moment, and it steps on. Nothing pushes.
+
+Progressions are stored as scale degrees, so they follow whichever root and scale the
+instrument is set to. **Creep** is the one to try first — its last two chords are the same
+fingers with the wrist turned, which is the tilt gesture and nothing else. Several of the
+others (Wonderwall, Dust in the Wind, Stairway) need the second degree played major, which
+is only reachable by tilting too.
+
+## Latency
+
+There is some, and it is mostly deliberate:
+
+| | |
+| --- | --- |
+| camera capture and transport | ~40 ms |
+| hand tracking | 10–20 ms, shown live in the readout |
+| stability gate, 3 frames at 30 fps | ~100 ms |
+| glide and parameter ramp | ~100 ms |
+| audio lookahead | 20 ms |
+
+About a fifth of a second on a chord change. Volume and distortion skip the stability gate
+and land nearer 150 ms. Every one of those numbers is a slider in the tuning panel —
+shortening the stability gate is the biggest win, at the cost of the occasional stray
+chord while your fingers are still moving.
 
 ## Tuning
 
@@ -96,8 +142,10 @@ waving at the screen.
 src/
   vision/     camera + MediaPipe hand tracking
   gesture/    landmarks → PerformanceState   (pure, tested)
-  audio/      PerformanceState → sound
+  audio/      PerformanceState → sound       (voicing is pure, tested)
+  music/      song progressions as scale degrees
   visual/     shader background + hand overlay
+  ui/         tuning panel, song guide
 ```
 
 `PerformanceState` is the only interface between seeing and hearing: vision knows nothing

@@ -40,6 +40,10 @@ export type Config = {
      *  very top and bottom, where tracking is least reliable. */
     topY: number
     bottomY: number
+    /** Level at the bottom of the band. Above zero on purpose: dropping the hand should
+     *  thin the sound, not end it. Silence belongs to the fist, which is deliberate and
+     *  can be held — a hand at the bottom of frame is neither. */
+    floor: number
   }
   smoothing: {
     /** Exponential moving average weight for continuous controls, 0..1. Lower is
@@ -58,10 +62,18 @@ export type Config = {
     /** Semitones from the root for degrees I..VII. Major scale by default. */
     scale: readonly number[]
   }
+  sound: {
+    /** Name of the synth preset — see audio/presets.ts. */
+    preset: string
+  }
   vision: {
     minHandDetectionConfidence: number
     minHandPresenceConfidence: number
     minTrackingConfidence: number
+    /** Exchanges which physical hand plays chords and which shapes them. Exists because
+     *  which way round MediaPipe reports handedness is not reliably predictable — see
+     *  vision/handTracker.ts. Flip it if the wrong hand is choosing notes. */
+    swapHands: boolean
   }
 }
 
@@ -77,12 +89,15 @@ export const defaultConfig: Config = {
     minorAboveDeg: 30,
   },
   distortion: {
-    minDeg: 0,
+    // Not zero: a hand is never perfectly vertical, and without a clean zone there is
+    // always a little drive on.
+    minDeg: 8,
     maxDeg: 55,
   },
   volume: {
     topY: 0.15,
-    bottomY: 0.85,
+    bottomY: 0.95,
+    floor: 0.1,
   },
   smoothing: {
     alpha: 0.25,
@@ -94,10 +109,14 @@ export const defaultConfig: Config = {
     root: 'C3',
     scale: [0, 2, 4, 5, 7, 9, 11],
   },
+  sound: {
+    preset: 'Organ',
+  },
   vision: {
     minHandDetectionConfidence: 0.5,
     minHandPresenceConfidence: 0.5,
     minTrackingConfidence: 0.5,
+    swapHands: false,
   },
 }
 
