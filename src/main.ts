@@ -9,8 +9,10 @@ import { createTuningPanel } from './ui/tuning'
 import { startCamera } from './vision/camera'
 import { createHandTracker } from './vision/handTracker'
 import { createOverlay } from './visual/overlay'
+import { createVisualizer } from './visual/scene'
 
 const video = document.querySelector<HTMLVideoElement>('#video')!
+const sceneCanvas = document.querySelector<HTMLCanvasElement>('#scene')!
 const overlayCanvas = document.querySelector<HTMLCanvasElement>('#overlay')!
 const startScreen = document.querySelector<HTMLDivElement>('#start-screen')!
 const startButton = document.querySelector<HTMLButtonElement>('#start-button')!
@@ -45,6 +47,7 @@ async function start(): Promise<void> {
   const camera = await startCamera(video)
   const tracker = await createHandTracker(config)
   const overlay = createOverlay(overlayCanvas, camera.video)
+  const visualizer = createVisualizer(sceneCanvas)
   const interpreter = createInterpreter(config)
 
   // Mutates config in place; the interpreter and engine both re-read it every frame, so
@@ -52,6 +55,21 @@ async function start(): Promise<void> {
   createTuningPanel(config)
 
   startScreen.hidden = true
+
+  // Both readouts can be hidden so the instrument can be filmed without debug furniture
+  // over it. The shader and the sound are unaffected.
+  let showHud = true
+  let showSkeleton = true
+
+  window.addEventListener('keydown', (event) => {
+    if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) return
+    const key = event.key.toLowerCase()
+    if (key === 'h') {
+      showHud = !showHud
+      if (!showHud) hud.textContent = ''
+    }
+    if (key === 's') showSkeleton = !showSkeleton
+  })
 
   let fps = 0
   let detectMs = 0
@@ -76,7 +94,7 @@ async function start(): Promise<void> {
       '',
       `chord  ${chord}`,
       '',
-      'press T to tune',
+      'T tune · H hide · S skeleton',
     ].join('\n')
   }
 
@@ -92,8 +110,11 @@ async function start(): Promise<void> {
     const state = interpreter.update(frame)
     audio.update(state)
 
-    overlay.draw(frame)
-    render(state)
+    visualizer.update(state, audio.getLevel(), now)
+
+    if (showSkeleton) overlay.draw(frame)
+    else overlay.clear()
+    if (showHud) render(state)
 
     requestAnimationFrame(loop)
   }

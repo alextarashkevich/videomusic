@@ -39,6 +39,27 @@ Tilting the wrist drives **distortion**. Raising and lowering the hand sets **vo
 An unrecognised hand shape holds whatever was playing, so rearranging your fingers never
 produces a stray note.
 
+## Keys
+
+| Key | |
+| --- | --- |
+| `T` | tuning panel — every threshold, adjustable while playing |
+| `H` | hide the readout |
+| `S` | hide the hand skeleton |
+
+`H` and `S` together leave just the instrument and the shader, for filming.
+
+## Tuning
+
+Recognition thresholds, the major/minor angle, the volume band and the feel of the
+smoothing are all things that can only be settled by playing. Press `T` and drag — every
+change is audible immediately and is saved, so a session survives a reload. "Reset to
+defaults" undoes the lot.
+
+If a gesture is being missed, the readout shows the finger mask it is actually seeing
+(`TIMRP`, one letter per finger) alongside the wrist angle, which is usually enough to
+tell which threshold is wrong.
+
 ## Privacy
 
 Everything runs on your device. The hand tracking model is a static file that executes

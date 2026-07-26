@@ -45,10 +45,16 @@ body {
 #video {
   object-fit: cover;
   transform: scaleX(-1);
+  /* Held back so the shader over it reads, and so the hand skeleton stays legible. */
+  filter: brightness(0.5) saturate(0.65) contrast(1.05);
 }
 
+/* Screen-blended over the video rather than replacing it: you need to see your own
+   hands to play, and a glow over a dimmed feed reads better on camera than a field
+   that hides you completely. */
 #scene {
   pointer-events: none;
+  mix-blend-mode: screen;
 }
 
 #overlay {
@@ -106,6 +112,48 @@ body {
 .tagline {
   max-width: 34ch;
   color: var(--dim);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px 36px;
+  max-width: 640px;
+  margin: 4px 0;
+  text-align: left;
+}
+
+.legend div {
+  max-width: 270px;
+}
+
+.legend dt {
+  margin-bottom: 4px;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.legend dd {
+  margin: 0;
+  color: var(--dim);
+  font-size: 13px;
+}
+
+.keys {
+  color: #5a5a6c;
+  font-size: 12px;
+}
+
+.keys kbd {
+  padding: 1px 5px;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 4px;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 11px;
 }
 
 #start-button {

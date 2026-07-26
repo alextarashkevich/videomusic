@@ -20,6 +20,7 @@
     "tone": "^15.1.22"
   },
   "devDependencies": {
+    "@types/three": "^0.185.1",
     "typescript": "^5.9.3",
     "vite": "^8.1.5",
     "vitest": "^4.1.10"
