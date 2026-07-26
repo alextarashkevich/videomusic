@@ -18,6 +18,7 @@ identity.
 | 1 finger | I |
 | 2 fingers | II |
 | 3 fingers | III |
+| thumb + index + middle | III — the same, counted the German way |
 | 4 fingers | IV |
 | open palm | V |
 | коза (index + pinky) | VI |
@@ -37,9 +38,9 @@ Rotating the wrist switches the chord between **major** (upright) and **minor** 
 Every setting is a chord, and every one contains the third — which is what the wrist tilt
 changes, so major and minor are audible whatever the left hand is doing.
 
-Tilting the left wrist drives **distortion**. Raising and lowering the hand sets
-**volume**, down to a floor rather than to nothing: dropping your hand thins the sound
-out, and silence belongs to the fist.
+Raising and lowering the hand sets **volume**, down to a floor rather than to nothing:
+dropping your hand thins the sound out, and silence belongs to the fist. Tilting the left
+wrist warps the visuals; no audio effect is mapped to it at the moment.
 
 An unrecognised hand shape holds whatever was playing, so rearranging your fingers never
 produces a stray note.
@@ -56,13 +57,18 @@ around the keyboard in parallel blocks.
 
 ## Keys
 
+Everything here is also a button along the bottom of the screen, so none of it has to be
+remembered. Shortcuts are matched on the physical key rather than the character it types,
+so they work on any keyboard layout.
+
 | Key | |
 | --- | --- |
 | `T` | tuning panel — every threshold, adjustable while playing |
 | `⇧G` | show or hide the song guide |
 | `G` | next song |
 | `1`–`5` | synth: Organ, Warm pad, Rock organ, Strings, Glass |
-| `H` | hide the readout |
+| `X` | swap which hand plays chords |
+| `H` | hide the readout and the buttons |
 | `S` | hide the hand skeleton |
 
 `H` and `S` together leave just the instrument and the shader, for filming.
@@ -86,12 +92,11 @@ There is some, and it is mostly deliberate:
 | --- | --- |
 | camera capture and transport | ~40 ms |
 | hand tracking | 10–20 ms, shown live in the readout |
-| stability gate, 3 frames at 30 fps | ~100 ms |
+| stability gate, 2 frames at 30 fps | ~66 ms |
 | glide and parameter ramp | ~100 ms |
 | audio lookahead | 20 ms |
 
-About a fifth of a second on a chord change. Volume and distortion skip the stability gate
-and land nearer 150 ms. Every one of those numbers is a slider in the tuning panel —
+Around 200 ms on a chord change. Volume skips the stability gate and lands nearer 150 ms. Every one of those numbers is a slider in the tuning panel —
 shortening the stability gate is the biggest win, at the cost of the occasional stray
 chord while your fingers are still moving.
 
@@ -103,8 +108,14 @@ change is audible immediately and is saved, so a session survives a reload. "Res
 defaults" undoes the lot.
 
 If a gesture is being missed, the readout shows the finger mask it is actually seeing
-(`TIMRP`, one letter per finger) alongside the wrist angle, which is usually enough to
-tell which threshold is wrong.
+(`TIMRP`, one letter per finger) alongside the wrist angle. Under it is `reach` — how far
+each fingertip is from its own knuckle, which is the number the extension threshold is
+compared against. Hold up one finger, then two, and read both rows: the threshold belongs
+between them. That beats guessing at it.
+
+**Stability** is the speed/accuracy trade. Lower it and the instrument answers sooner;
+lower it too far and shapes your fingers pass through on the way somewhere else start
+sounding.
 
 ## Privacy
 

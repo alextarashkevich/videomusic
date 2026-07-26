@@ -41,10 +41,10 @@ export const FINGER_BIT = {
 /** The four fingers that fold along the same axis and can share one test. The thumb
  *  needs its own, which is why it is absent here. */
 export const HINGED_FINGERS = [
-  { bit: FINGER_BIT.INDEX, tip: LANDMARK.INDEX_TIP, pip: LANDMARK.INDEX_PIP },
-  { bit: FINGER_BIT.MIDDLE, tip: LANDMARK.MIDDLE_TIP, pip: LANDMARK.MIDDLE_PIP },
-  { bit: FINGER_BIT.RING, tip: LANDMARK.RING_TIP, pip: LANDMARK.RING_PIP },
-  { bit: FINGER_BIT.PINKY, tip: LANDMARK.PINKY_TIP, pip: LANDMARK.PINKY_PIP },
+  { name: 'index', bit: FINGER_BIT.INDEX, mcp: LANDMARK.INDEX_MCP, tip: LANDMARK.INDEX_TIP },
+  { name: 'middle', bit: FINGER_BIT.MIDDLE, mcp: LANDMARK.MIDDLE_MCP, tip: LANDMARK.MIDDLE_TIP },
+  { name: 'ring', bit: FINGER_BIT.RING, mcp: LANDMARK.RING_MCP, tip: LANDMARK.RING_TIP },
+  { name: 'pinky', bit: FINGER_BIT.PINKY, mcp: LANDMARK.PINKY_MCP, tip: LANDMARK.PINKY_TIP },
 ] as const
 
 /** Pairs of landmark indices to draw as bones in the overlay. */

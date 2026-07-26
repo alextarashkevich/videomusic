@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { defaultConfig } from '../config'
-import { distortionAmount, heightFraction, tiltDegrees, tiltMagnitude } from './angles'
+import { tiltAmount, heightFraction, tiltDegrees, tiltMagnitude } from './angles'
 import { GESTURES, makeHand } from './testHands'
 
 describe('tiltDegrees', () => {
@@ -65,18 +65,18 @@ describe('heightFraction', () => {
   })
 })
 
-describe('distortionAmount', () => {
-  it('is silent-clean with an upright hand and full at the far end of the range', () => {
-    expect(distortionAmount(makeHand(GESTURES.three), defaultConfig)).toBeCloseTo(0, 6)
+describe('tiltAmount', () => {
+  it('is zero with an upright hand and full at the far end of the range', () => {
+    expect(tiltAmount(makeHand(GESTURES.three), defaultConfig)).toBeCloseTo(0, 6)
 
-    const beyond = makeHand(GESTURES.three, { tilt: defaultConfig.distortion.maxDeg + 20 })
-    expect(distortionAmount(beyond, defaultConfig)).toBe(1)
+    const beyond = makeHand(GESTURES.three, { tilt: defaultConfig.tilt.maxDeg + 20 })
+    expect(tiltAmount(beyond, defaultConfig)).toBe(1)
   })
 
   it('rises with tilt in either direction', () => {
-    const left = distortionAmount(makeHand(GESTURES.three, { tilt: -28 }), defaultConfig)
-    const right = distortionAmount(makeHand(GESTURES.three, { tilt: 28 }), defaultConfig)
-    const upright = distortionAmount(makeHand(GESTURES.three, { tilt: 0 }), defaultConfig)
+    const left = tiltAmount(makeHand(GESTURES.three, { tilt: -28 }), defaultConfig)
+    const right = tiltAmount(makeHand(GESTURES.three, { tilt: 28 }), defaultConfig)
+    const upright = tiltAmount(makeHand(GESTURES.three, { tilt: 0 }), defaultConfig)
 
     expect(left).toBeCloseTo(right, 6)
     expect(left).toBeGreaterThan(upright)
@@ -84,7 +84,7 @@ describe('distortionAmount', () => {
 
   it('never leaves 0..1', () => {
     for (let tilt = -180; tilt <= 180; tilt += 5) {
-      const amount = distortionAmount(makeHand(GESTURES.three, { tilt }), defaultConfig)
+      const amount = tiltAmount(makeHand(GESTURES.three, { tilt }), defaultConfig)
       expect(amount).toBeGreaterThanOrEqual(0)
       expect(amount).toBeLessThanOrEqual(1)
     }

@@ -65,9 +65,9 @@ export function volumeLevel(landmarks: Landmarks, config: Config): number {
   return floor + (1 - floor) * heightFraction(landmarks, config)
 }
 
-/** Maps tilt onto 0..1 across the configured range. */
-export function distortionAmount(landmarks: Landmarks, config: Config): number {
-  const { minDeg, maxDeg } = config.distortion
+/** Maps how far the wrist is turned onto 0..1 across the configured range. */
+export function tiltAmount(landmarks: Landmarks, config: Config): number {
+  const { minDeg, maxDeg } = config.tilt
   if (maxDeg === minDeg) return 0
 
   return clamp01((tiltMagnitude(landmarks) - minDeg) / (maxDeg - minDeg))

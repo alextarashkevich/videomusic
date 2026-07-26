@@ -1,7 +1,7 @@
 import type { Config } from '../config'
 import type { Density, FingerMask, HandFrame, PerformanceState, ScaleDegree } from '../types'
-import { distortionAmount, tiltMagnitude, volumeLevel } from './angles'
-import { fingerMask } from './fingers'
+import { tiltAmount, tiltMagnitude, volumeLevel } from './angles'
+import { fingerMask, fingerReach } from './fingers'
 import { FINGER_BIT } from './landmarks'
 import { createLatch, createSmoother, createStabilizer } from './stabilizer'
 
@@ -12,22 +12,28 @@ const { THUMB, INDEX, MIDDLE, RING, PINKY } = FINGER_BIT
  *
  * Keyed by identity rather than count, which is the only way "коза" (index + pinky) and
  * "two fingers" (index + middle) can be told apart — both are two fingers.
+ *
+ * A degree may have more than one shape. Three is the case that matters: counting it on
+ * the thumb, index and middle is how much of Europe does it, and it is a far more
+ * comfortable hand than holding the ring finger up while the pinky stays down.
  */
 export const DEGREE_BY_MASK: ReadonlyMap<FingerMask, ScaleDegree> = new Map([
   [INDEX, 1],
   [INDEX | MIDDLE, 2],
   [INDEX | MIDDLE | RING, 3],
+  [THUMB | INDEX | MIDDLE, 3],
   [INDEX | MIDDLE | RING | PINKY, 4],
   [THUMB | INDEX | MIDDLE | RING | PINKY, 5],
   [INDEX | PINKY, 6],
   [THUMB | INDEX | PINKY, 7],
 ] as [FingerMask, ScaleDegree][])
 
-/** Left hand: how thickly the chord is voiced. */
+/** Left hand: how thickly the chord is voiced. Three has the same second shape. */
 export const DENSITY_BY_MASK: ReadonlyMap<FingerMask, Density> = new Map([
   [INDEX, 1],
   [INDEX | MIDDLE, 2],
   [INDEX | MIDDLE | RING, 3],
+  [THUMB | INDEX | MIDDLE, 3],
 ] as [FingerMask, Density][])
 
 /** A closed left hand is the mute. */
@@ -41,6 +47,10 @@ export type InterpreterDebug = {
   rightTilt: number
   leftTilt: number
   rightLostFrames: number
+  /** Raw per-finger reach for the chord hand, in hand widths — what the extension
+   *  threshold is compared against. Shown in the readout so the threshold can be set
+   *  from what the camera actually sees rather than guessed at. */
+  rightReach: Record<string, number>
 }
 
 export type Interpreter = {
@@ -70,7 +80,7 @@ export function createInterpreter(config: Config): Interpreter {
   const density = createStabilizer<Density>(3)
   const gate = createStabilizer<boolean>(true)
   const minor = createLatch()
-  const distortion = createSmoother(0)
+  const tilt = createSmoother(0)
   const volume = createSmoother(0.7)
 
   let rightLostFrames = 0
@@ -79,7 +89,7 @@ export function createInterpreter(config: Config): Interpreter {
     degree: null,
     quality: 'major',
     density: 3,
-    distortion: 0,
+    tilt: 0,
     volume: 0.7,
   }
 
@@ -89,6 +99,7 @@ export function createInterpreter(config: Config): Interpreter {
     rightTilt: 0,
     leftTilt: 0,
     rightLostFrames: 0,
+    rightReach: {},
   }
 
   return {
@@ -103,6 +114,7 @@ export function createInterpreter(config: Config): Interpreter {
         const mask = fingerMask(frame.right.landmarks, config)
         debug.rightMask = mask
         debug.rightTilt = tiltMagnitude(frame.right.landmarks)
+        debug.rightReach = fingerReach(frame.right.landmarks)
 
         // An unrecognised shape yields null, which holds the last degree instead of
         // committing a stray one. This is what makes rearranging fingers silent: the
@@ -128,7 +140,7 @@ export function createInterpreter(config: Config): Interpreter {
         // shapes passed through on the way in or out of a fist change nothing.
         gate.push(mask === FIST ? false : voicing !== null ? true : null, stabilityFrames)
 
-        distortion.push(distortionAmount(frame.left.landmarks, config), config.smoothing.alpha)
+        tilt.push(tiltAmount(frame.left.landmarks, config), config.smoothing.alpha)
         volume.push(volumeLevel(frame.left.landmarks, config), config.smoothing.alpha)
       } else {
         debug.leftMask = null
@@ -147,7 +159,7 @@ export function createInterpreter(config: Config): Interpreter {
         degree: degree.value,
         quality: minor.value ? 'minor' : 'major',
         density: density.value ?? 3,
-        distortion: distortion.value,
+        tilt: tilt.value,
         volume: volume.value,
       }
       return last
@@ -158,7 +170,7 @@ export function createInterpreter(config: Config): Interpreter {
       density.reset()
       gate.reset()
       minor.reset()
-      distortion.reset()
+      tilt.reset()
       volume.reset()
       rightLostFrames = 0
     },

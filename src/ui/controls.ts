@@ -27,14 +27,14 @@ export const CONTROLS: readonly Control[] = [
   {
     group: 'Recognition',
     label: 'Finger extension',
-    min: 0.9,
-    max: 1.5,
+    min: 0.15,
+    max: 0.8,
     step: 0.01,
-    get: (c) => c.gesture.extendedRatio,
+    get: (c) => c.gesture.extendedReach,
     set: (c, v) => {
-      c.gesture.extendedRatio = v
+      c.gesture.extendedReach = v
     },
-    hint: 'Raise it if half-curled fingers read as extended; lower it if extended ones are missed.',
+    hint: 'How far a fingertip must be from its knuckle to count as up, in hand widths. The readout shows the live measurement per finger — hold up one finger, then two, and put this between the two sets of numbers.',
   },
   {
     group: 'Recognition',
@@ -103,30 +103,30 @@ export const CONTROLS: readonly Control[] = [
   },
 
   {
-    group: 'Distortion',
-    label: 'Clean until',
+    group: 'Wrist tilt',
+    label: 'Neutral until',
     min: 0,
     max: 40,
     step: 1,
     format: degrees,
-    get: (c) => c.distortion.minDeg,
+    get: (c) => c.tilt.minDeg,
     set: (c, v) => {
-      c.distortion.minDeg = v
+      c.tilt.minDeg = v
     },
-    hint: 'Left-hand tilt below this stays clean.',
+    hint: 'Left-hand tilt below this counts as upright.',
   },
   {
-    group: 'Distortion',
-    label: 'Full drive at',
+    group: 'Wrist tilt',
+    label: 'Full at',
     min: 10,
     max: 90,
     step: 1,
     format: degrees,
-    get: (c) => c.distortion.maxDeg,
+    get: (c) => c.tilt.maxDeg,
     set: (c, v) => {
-      c.distortion.maxDeg = v
+      c.tilt.maxDeg = v
     },
-    hint: 'Tilt at which drive reaches maximum.',
+    hint: 'Tilt at which the visuals reach full warp. No audio effect is mapped to this at the moment.',
   },
 
   {

@@ -7,6 +7,7 @@ import { describeMask } from './gesture/fingers'
 import { createInterpreter } from './gesture/interpret'
 import type { PerformanceState } from './types'
 import { createSongGuide } from './ui/songGuide'
+import { createToolbar } from './ui/toolbar'
 import { createTuningPanel } from './ui/tuning'
 import { startCamera } from './vision/camera'
 import { createHandTracker } from './vision/handTracker'
@@ -28,6 +29,14 @@ const ROMAN = ['—', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII'] as const
 // Held across attempts: if the camera fails and the user retries, rebuilding this would
 // leave the first synth and its AudioContext running behind the second.
 let audio: AudioEngine | null = null
+
+/** Per-finger reach, so the extension threshold can be read off a real hand: hold up
+ *  one finger, then two, and the boundary is plainly between the two sets of numbers. */
+function reachOf(reach: Record<string, number>): string {
+  return ['index', 'middle', 'ring', 'pinky', 'thumb']
+    .map((finger) => (reach[finger] ?? 0).toFixed(2))
+    .join(' ')
+}
 
 function bar(value: number, width = 12): string {
   const filled = Math.round(value * width)
@@ -80,33 +89,89 @@ async function start(): Promise<void> {
   let showHud = true
   let showSkeleton = true
 
+  function cyclePreset(): void {
+    const index = PRESETS.findIndex((preset) => preset.name === config.sound.preset)
+    config.sound.preset = PRESETS[(index + 1) % PRESETS.length]!.name
+    saveConfig(config)
+  }
+
+  function toggleGuide(): void {
+    guide.toggle()
+    guide.setVisible(!tuning.open)
+  }
+
+  function toggleHud(): void {
+    showHud = !showHud
+    if (!showHud) hud.textContent = ''
+  }
+
+  function swapHands(): void {
+    config.vision.swapHands = !config.vision.swapHands
+    saveConfig(config)
+  }
+
+  const toolbar = createToolbar([
+    { label: 'Tune', key: 'T', onClick: () => tuning.toggle() },
+    { label: 'Songs', key: '⇧G', onClick: toggleGuide },
+    { label: 'Next song', key: 'G', onClick: () => guide.next() },
+    {
+      label: 'Synth',
+      key: '1–5',
+      label2: () => config.sound.preset,
+      onClick: cyclePreset,
+    },
+    {
+      label: 'Swap hands',
+      key: 'X',
+      title: 'If the wrong hand is choosing chords, press this.',
+      label2: () => (config.vision.swapHands ? 'Hands: swapped' : 'Swap hands'),
+      onClick: swapHands,
+    },
+    { label: 'Readout', key: 'H', onClick: toggleHud },
+    { label: 'Skeleton', key: 'S', onClick: () => (showSkeleton = !showSkeleton) },
+  ])
+
+  tuning.onToggle(() => toolbar.refresh())
+
+  // Keyed off `code`, the physical key, rather than `key`, the character it produced.
+  // On a non-Latin layout `key` for the T key is "е", so every shortcut here silently
+  // did nothing.
   window.addEventListener('keydown', (event) => {
     if (event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) return
+    if (event.metaKey || event.ctrlKey || event.altKey) return
 
-    if (event.key === 'G') {
-      guide.toggle()
-      guide.setVisible(!tuning.open)
-      return
-    }
-    if (event.key === 'g') {
-      guide.next()
-      return
-    }
-
-    // Number keys pick a synth. The engine picks the change up from config.
-    const preset = PRESETS[Number(event.key) - 1]
-    if (preset !== undefined) {
-      config.sound.preset = preset.name
-      saveConfig(config)
+    const digit = /^Digit([1-9])$/.exec(event.code)
+    if (digit !== null) {
+      const preset = PRESETS[Number(digit[1]) - 1]
+      if (preset !== undefined) {
+        config.sound.preset = preset.name
+        saveConfig(config)
+        toolbar.refresh()
+      }
       return
     }
 
-    const key = event.key.toLowerCase()
-    if (key === 'h') {
-      showHud = !showHud
-      if (!showHud) hud.textContent = ''
+    switch (event.code) {
+      case 'KeyT':
+        tuning.toggle()
+        break
+      case 'KeyG':
+        if (event.shiftKey) toggleGuide()
+        else guide.next()
+        break
+      case 'KeyX':
+        swapHands()
+        toolbar.refresh()
+        break
+      case 'KeyH':
+        toggleHud()
+        break
+      case 'KeyS':
+        showSkeleton = !showSkeleton
+        break
+      default:
+        return
     }
-    if (key === 's') showSkeleton = !showSkeleton
   })
 
   let fps = 0
@@ -127,13 +192,11 @@ async function start(): Promise<void> {
       `LEFT   ${leftMask === null ? '  —  ' : describeMask(leftMask)}   ${leftTilt.toFixed(0).padStart(3)}°`,
       `       ${state.gate ? 'sound' : 'muted'}   ${['', 'triad', '+octave', '7th'][state.density]}`,
       '',
-      `dist   ${bar(state.distortion)} ${(state.distortion * 100).toFixed(0).padStart(3)}%`,
+      `tilt   ${bar(state.tilt)} ${(state.tilt * 100).toFixed(0).padStart(3)}%`,
       `vol    ${bar(state.volume)} ${(state.volume * 100).toFixed(0).padStart(3)}%`,
       '',
-      `synth  ${engine.preset}`,
-      '',
-      'T tune · G songs · 1-5 synth',
-      'H hide · S skeleton',
+      `reach  ${reachOf(interpreter.debug.rightReach)}`,
+      `       I    M    R    P    thumb   (>${config.gesture.extendedReach.toFixed(2)} = up)`,
     ].join('\n')
   }
 
@@ -159,6 +222,7 @@ async function start(): Promise<void> {
     if (showSkeleton) overlay.draw(frame)
     else overlay.clear()
     if (showHud) render(state)
+    toolbar.setVisible(showHud)
 
     requestAnimationFrame(loop)
   }

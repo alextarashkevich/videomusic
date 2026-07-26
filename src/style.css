@@ -188,6 +188,57 @@ body {
   display: none;
 }
 
+/* Everything the shortcuts do, visible. The shortcuts alone are hard to find, and on a
+   non-Latin keyboard layout they used to do nothing at all. */
+#toolbar {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  z-index: 15;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-width: calc(100vw - 32px);
+}
+
+#toolbar[hidden] {
+  display: none;
+}
+
+#toolbar button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 12px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 999px;
+  background: rgb(7 7 11 / 66%);
+  backdrop-filter: blur(12px);
+  color: var(--fg);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+#toolbar button:hover {
+  border-color: rgb(110 231 255 / 45%);
+  background: rgb(14 14 22 / 82%);
+}
+
+#toolbar button:active {
+  transform: translateY(1px);
+}
+
+#toolbar kbd {
+  padding: 1px 5px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 4px;
+  color: var(--dim);
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 10px;
+}
+
 /* Song guide — top right, as a chart on a music stand would be. */
 #song-guide {
   position: absolute;

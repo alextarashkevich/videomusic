@@ -35,8 +35,8 @@ export type PerformanceState = {
   degree: ScaleDegree | null
   quality: ChordQuality
   density: Density
-  /** 0..1, smoothed. */
-  distortion: number
+  /** How far the left wrist is turned, 0..1, smoothed. Drives the visuals. */
+  tilt: number
   /** 0..1, smoothed. */
   volume: number
 }

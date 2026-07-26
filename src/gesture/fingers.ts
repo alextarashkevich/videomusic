@@ -24,27 +24,59 @@ export function handScale(landmarks: Landmarks): number {
  * Works out which fingers are extended, as a 5-bit mask.
  *
  * The obvious test — is the fingertip above the knuckle — falls apart the moment the
- * hand rotates, and rotation is a control here rather than an accident. So a finger is
- * judged extended when its tip has moved further from the wrist than its middle joint
- * has. That comparison depends only on the hand's own geometry, so it survives both
- * rotation and distance from the camera.
+ * hand rotates, and rotation is a control here rather than an accident. So everything is
+ * measured as distances within the hand, divided by the wrist-to-middle-knuckle span,
+ * which survives both rotation and distance from the camera.
+ *
+ * A finger counts as extended when its tip has reached far enough from *its own knuckle*.
+ * Comparing against the middle joint instead is tempting and worse: curling a finger
+ * pushes that joint outward, so it chases the tip and narrows the gap between open and
+ * closed to almost nothing — which is what made one finger and two hard to tell apart.
+ * The knuckle is fixed to the palm and does not move at all.
  *
  * The thumb folds across a different axis than the other four, so it gets its own test:
  * how far its tip sits from the pinky knuckle. Tucked across the palm that distance
  * collapses; held out to the side it roughly doubles.
  */
-export function fingerMask(landmarks: Landmarks, config: Config): FingerMask {
-  const wrist = landmarks[LANDMARK.WRIST]
+/**
+ * How far each fingertip has reached away from its own knuckle, in hand widths.
+ *
+ * This is the raw measurement the mask is derived from, exposed so the readout can show
+ * it: holding up one finger and then two and reading the numbers tells you exactly where
+ * the threshold belongs, which is worth more than any amount of guessing at it.
+ */
+export function fingerReach(landmarks: Landmarks): Record<string, number> {
   const scale = handScale(landmarks)
-  if (wrist === undefined || scale === 0) return 0
+  const reach: Record<string, number> = {}
+  if (scale === 0) return reach
+
+  for (const finger of HINGED_FINGERS) {
+    const tip = landmarks[finger.tip]
+    const mcp = landmarks[finger.mcp]
+    if (tip === undefined || mcp === undefined) continue
+    reach[finger.name] = distance(mcp, tip) / scale
+  }
+
+  const thumbTip = landmarks[LANDMARK.THUMB_TIP]
+  const pinkyMcp = landmarks[LANDMARK.PINKY_MCP]
+  if (thumbTip !== undefined && pinkyMcp !== undefined) {
+    reach['thumb'] = distance(thumbTip, pinkyMcp) / scale
+  }
+
+  return reach
+}
+
+export function fingerMask(landmarks: Landmarks, config: Config): FingerMask {
+  const scale = handScale(landmarks)
+  if (scale === 0) return 0
 
   let mask = 0
 
   for (const finger of HINGED_FINGERS) {
     const tip = landmarks[finger.tip]
-    const pip = landmarks[finger.pip]
-    if (tip === undefined || pip === undefined) continue
-    if (distance(wrist, tip) > distance(wrist, pip) * config.gesture.extendedRatio) {
+    const mcp = landmarks[finger.mcp]
+    if (tip === undefined || mcp === undefined) continue
+    if (distance(mcp, tip) > scale * config.gesture.extendedReach) {
       mask |= finger.bit
     }
   }

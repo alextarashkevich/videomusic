@@ -46,6 +46,28 @@ describe('right hand chooses the degree', () => {
     })
   }
 
+  // Holding the ring finger up while the pinky stays down is an awkward hand; counting
+  // three on the thumb, index and middle is not, and is how much of Europe does it.
+  it('accepts three counted the German way as well', () => {
+    const state = hold({ right: hand(GESTURES.threeGerman), left: openLeft() })
+    expect(state.degree).toBe(3)
+  })
+
+  it('gives both shapes for three the same chord', () => {
+    const german = hold({ right: hand(GESTURES.threeGerman), left: openLeft() })
+    interpreter.reset()
+    const other = hold({ right: hand(GESTURES.three), left: openLeft() })
+    expect(german.degree).toBe(other.degree)
+  })
+
+  it('does not confuse the German three with any other gesture', () => {
+    for (const name of ['one', 'two', 'four', 'open', 'koza', 'kozaThumb'] as const) {
+      interpreter.reset()
+      const state = hold({ right: hand(GESTURES[name]), left: openLeft() })
+      expect(state.degree, name).not.toBe(3)
+    }
+  })
+
   it('plays nothing until a recognised gesture has been held', () => {
     const state = interpreter.update({ right: hand(GESTURES.one), left: openLeft() })
     expect(state.degree).toBeNull()
@@ -59,24 +81,35 @@ describe('right hand chooses the degree', () => {
     expect(state.degree).toBe(6)
   })
 
+  /** One finger, then a brush past two, then three. */
+  function moveThroughTwo(passingFrames: number): (number | null)[] {
+    const degrees: (number | null)[] = []
+    const push = (gesture: keyof typeof GESTURES, frames: number) => {
+      for (let i = 0; i < frames; i++) {
+        degrees.push(interpreter.update({ right: hand(GESTURES[gesture]), left: openLeft() }).degree)
+      }
+    }
+
+    push('one', 8)
+    push('two', passingFrames)
+    push('three', 8)
+    return degrees
+  }
+
   // The design claim that makes sustained mode playable: rearranging the fingers must
   // not sound the shapes passed through on the way.
-  it('does not sound the two-finger degree while moving from one finger to three', () => {
-    const degrees: (number | null)[] = []
-
-    for (let i = 0; i < 8; i++) {
-      degrees.push(interpreter.update({ right: hand(GESTURES.one), left: openLeft() }).degree)
-    }
-    // Two frames in the in-between shape, fewer than the hand needs to settle.
-    for (let i = 0; i < 2; i++) {
-      degrees.push(interpreter.update({ right: hand(GESTURES.two), left: openLeft() }).degree)
-    }
-    for (let i = 0; i < 8; i++) {
-      degrees.push(interpreter.update({ right: hand(GESTURES.three), left: openLeft() }).degree)
-    }
+  it('does not sound a shape brushed past for less than the stability window', () => {
+    const degrees = moveThroughTwo(config.gesture.stabilityFrames - 1)
 
     expect(degrees).not.toContain(2)
     expect(degrees.at(-1)).toBe(3)
+  })
+
+  // The cost of a short stability window, stated plainly: it buys speed by accepting
+  // less evidence, so a shape lingered on for the full window does sound, wanted or not.
+  // This is the trade the Stability slider makes.
+  it('does sound a shape held for the whole window, even in passing', () => {
+    expect(moveThroughTwo(config.gesture.stabilityFrames)).toContain(2)
   })
 })
 
@@ -168,13 +201,13 @@ describe('left hand shapes the sound', () => {
     expect(state.gate).toBe(false)
   })
 
-  it('raises distortion as the hand tilts', () => {
+  it('reads the wrist angle as the hand tilts', () => {
     const upright = hold({ right: hand(GESTURES.one), left: openLeft({ tilt: 0 }) }, 60)
     interpreter.reset()
     const tilted = hold({ right: hand(GESTURES.one), left: openLeft({ tilt: 50 }) }, 60)
 
-    expect(upright.distortion).toBeLessThan(0.05)
-    expect(tilted.distortion).toBeGreaterThan(upright.distortion)
+    expect(upright.tilt).toBeLessThan(0.05)
+    expect(tilted.tilt).toBeGreaterThan(upright.tilt)
   })
 
   it('smooths volume rather than jumping to it', () => {
@@ -196,7 +229,7 @@ describe('missing hands', () => {
     const after = hold({ right: hand(GESTURES.one), left: null }, 30)
 
     expect(after.volume).toBeCloseTo(before.volume, 10)
-    expect(after.distortion).toBeCloseTo(before.distortion, 10)
+    expect(after.tilt).toBeCloseTo(before.tilt, 10)
     expect(after.density).toBe(before.density)
   })
 

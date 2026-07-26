@@ -26,16 +26,6 @@ export type AudioEngine = {
 type Voice = { synth: Tone.Synth; gain: Tone.Gain }
 
 /**
- * Rebuilding the drive curve is not free, and the hand supplies a new value every frame.
- * Quantising keeps the sweep smooth to the ear while the curve is only rebuilt when the
- * wrist has actually moved.
- */
-const DRIVE_STEPS = 32
-
-/** Curve sharpness at full drive. tanh at k=12 is close to a square wave. */
-const MAX_SHARPNESS = 11
-
-/**
  * Builds the synth.
  *
  * The instrument sustains, so rather than triggering notes, four voices are attacked
@@ -50,8 +40,7 @@ export async function createAudioEngine(config: Config): Promise<AudioEngine> {
   // playing with your hands.
   Tone.setContext(new Tone.Context({ latencyHint: 'interactive', lookAhead: 0.02 }))
 
-  // Not optional: drive at full tilt combined with a volume gesture is a real way to
-  // hurt someone wearing headphones.
+  // Last line of defence on an instrument whose volume is a hand waving in the air.
   const limiter = new Tone.Limiter(-2).toDestination()
 
   // Two separate stages so the gate can fade slowly while volume still tracks the hand
@@ -65,23 +54,11 @@ export async function createAudioEngine(config: Config): Promise<AudioEngine> {
   const reverb = new Tone.Reverb({ decay: 2.4, preDelay: 0.01, wet: 0.26 }).connect(volume)
   await reverb.generate()
 
+  // Matches presets to each other in loudness; nothing else sits on this stage now.
   const makeup = new Tone.Gain(1).connect(reverb)
 
-  // Only takes off the worst fizz. A tight lowpass here would scrub away the very
-  // harmonics the drive exists to create — measured at a third of the added brightness.
-  const polish = new Tone.Filter({ type: 'lowpass', frequency: 8000, rolloff: -12, Q: 0.4 })
-  polish.connect(makeup)
-
-  // tanh rather than Tone.Distortion: Tone's curve spends nearly its whole range in the
-  // last few degrees of tilt, so most of the gesture does nothing and the end does
-  // everything. tanh with a swept pre-gain gives an even slope from clean to crushed.
-  const drive = new Tone.WaveShaper((x: number) => x, 2048)
-  drive.oversample = '4x'
-  drive.connect(polish)
-
-  // Before the drive, not after: this shapes what gets distorted, the way an amp does.
   const tone = new Tone.Filter({ type: 'lowpass', frequency: 6000, rolloff: -12, Q: 0.4 })
-  tone.connect(drive)
+  tone.connect(makeup)
 
   const voices: Voice[] = []
   for (let index = 0; index < VOICE_COUNT; index++) {
@@ -96,7 +73,6 @@ export async function createAudioEngine(config: Config): Promise<AudioEngine> {
   }
 
   let preset: Preset = findPreset(DEFAULT_PRESET)
-  let lastDriveStep = -1
   let lastChord = ''
   let pitches: number[] | null = null
 
@@ -161,33 +137,12 @@ export async function createAudioEngine(config: Config): Promise<AudioEngine> {
         }
       }
 
-      // No preset trim here: the voices must hit the drive at the same level whatever
-      // the preset, or the trim would quietly change the character of the distortion
-      // along with the volume. Loudness matching happens after the drive instead.
       const gains = voiceGains(state.density)
       for (let index = 0; index < VOICE_COUNT; index++) {
         voices[index]!.gain.gain.rampTo(gains[index]!, rampSeconds, now)
       }
 
-      const step = Math.round(state.distortion * DRIVE_STEPS)
-      if (step !== lastDriveStep) {
-        lastDriveStep = step
-        const sharpness = 1 + (step / DRIVE_STEPS) * MAX_SHARPNESS
-        const normalise = Math.tanh(sharpness)
-        drive.setMap((x) => Math.tanh(sharpness * x) / normalise, 2048)
-      }
-
-      // Preset loudness matching and drive compensation, both after the drive.
-      //
-      // The compensation is measured per preset and deliberately partial: full drive
-      // lands about 1.3x louder than clean. Cancelling the increase entirely was why the
-      // drive read as doing nothing — the ear hears "louder and brighter" as "dirtier",
-      // and with the loudness removed it hears neither.
-      makeup.gain.rampTo(
-        preset.trim / (1 + state.distortion * preset.driveComp),
-        rampSeconds,
-        now,
-      )
+      makeup.gain.rampTo(preset.trim, rampSeconds, now)
 
       volume.gain.rampTo(state.volume, rampSeconds, now)
 
@@ -207,8 +162,6 @@ export async function createAudioEngine(config: Config): Promise<AudioEngine> {
         gain.dispose()
       }
       tone.dispose()
-      drive.dispose()
-      polish.dispose()
       makeup.dispose()
       reverb.dispose()
       meter.dispose()

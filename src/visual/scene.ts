@@ -148,7 +148,9 @@ export function createVisualizer(canvas: HTMLCanvasElement): Visualizer {
       const targetHue = state.degree === null ? hueForDegree(1) : hueForDegree(state.degree)
       uniforms.uHue.value = approachHue(uniforms.uHue.value, targetHue, 0.06)
       uniforms.uMinor.value = approach(uniforms.uMinor.value, state.quality === 'minor' ? 1 : 0, 0.05)
-      uniforms.uDistortion.value = approach(uniforms.uDistortion.value, state.distortion, 0.12)
+      // The left wrist no longer drives an audio effect, but it still warps the field —
+      // it is the one control with nothing to hear, so it had better be worth seeing.
+      uniforms.uDistortion.value = approach(uniforms.uDistortion.value, state.tilt, 0.12)
       uniforms.uLevel.value = approach(uniforms.uLevel.value, Math.min(level * 1.6, 1), 0.2)
 
       renderer.render(scene, camera)

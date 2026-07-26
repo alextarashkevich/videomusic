@@ -55,8 +55,14 @@ function lerp(a: Vec, b: Vec, t: number): Vec {
   return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }
 }
 
-/** An extended finger reaches outward; a folded one curls back so its tip ends up
- *  closer to the wrist than its middle joint. */
+/**
+ * An extended finger reaches outward; a folded one curls back toward the palm.
+ *
+ * The folded tip stops short of the knuckle rather than collapsing onto it, which is
+ * what a real curled finger does — and note that the middle joint sits *further* out
+ * when folded than the tip does. That is the geometry that makes measuring against the
+ * joint a poor test and measuring against the knuckle a good one.
+ */
 function fingerJoints(knuckle: Vec, extended: boolean): [Vec, Vec, Vec] {
   const direction = unit(knuckle)
   if (extended) {
@@ -67,9 +73,9 @@ function fingerJoints(knuckle: Vec, extended: boolean): [Vec, Vec, Vec] {
     ]
   }
   return [
-    along(knuckle, direction, 0.3),
+    along(knuckle, direction, 0.32),
+    along(knuckle, direction, 0.34),
     along(knuckle, direction, 0.2),
-    along(knuckle, direction, 0.05),
   ]
 }
 
@@ -122,4 +128,6 @@ export const GESTURES = {
   open: { thumb: true, index: true, middle: true, ring: true, pinky: true },
   koza: { thumb: false, index: true, middle: false, ring: false, pinky: true },
   kozaThumb: { thumb: true, index: true, middle: false, ring: false, pinky: true },
+  /** Three counted on the thumb, index and middle — the way much of Europe does it. */
+  threeGerman: { thumb: true, index: true, middle: true, ring: false, pinky: false },
 } as const satisfies Record<string, FingerStates>

@@ -9,9 +9,10 @@
  */
 export type Config = {
   gesture: {
-    /** A finger counts as extended when its tip is this much further from the wrist
-     *  than its middle joint. Above 1 so a slightly curled finger reads as folded. */
-    extendedRatio: number
+    /** How far a fingertip must sit from its own knuckle to count as extended, in hand
+     *  widths. Measured from the knuckle rather than the middle joint because the joint
+     *  moves outward as a finger curls, chasing the tip and hiding the difference. */
+    extendedReach: number
     /** The thumb folds across a different axis, so it is judged by how far its tip sits
      *  from the pinky knuckle, in hand units. */
     thumbSpread: number
@@ -30,8 +31,9 @@ export type Config = {
      *  a hand held near the boundary flickers between major and minor. */
     minorAboveDeg: number
   }
-  distortion: {
-    /** Left-hand tilt mapped onto 0..1 distortion. */
+  tilt: {
+    /** Left-hand wrist angle mapped onto 0..1. Drives the visuals; there is no audio
+     *  effect on it at the moment. */
     minDeg: number
     maxDeg: number
   }
@@ -79,18 +81,16 @@ export type Config = {
 
 export const defaultConfig: Config = {
   gesture: {
-    extendedRatio: 1.12,
+    extendedReach: 0.45,
     thumbSpread: 1.0,
-    stabilityFrames: 3,
+    stabilityFrames: 2,
     handLostFrames: 8,
   },
   quality: {
     majorBelowDeg: 20,
     minorAboveDeg: 30,
   },
-  distortion: {
-    // Not zero: a hand is never perfectly vertical, and without a clean zone there is
-    // always a little drive on.
+  tilt: {
     minDeg: 8,
     maxDeg: 55,
   },
