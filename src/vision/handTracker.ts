@@ -41,12 +41,35 @@ export async function createHandTracker(config: Config): Promise<HandTracker> {
   let lastVideoTime = -1
   let lastFrame: HandFrame = EMPTY
 
+  // Scratch canvas the camera picture is shrunk into before detection. The model works at
+  // 192×192 whatever it is handed, so a 1280×720 frame spends most of its cost being
+  // uploaded and resized — a third of a million pixels of it thrown away immediately. The
+  // display still gets the full-size video; only the detector sees this.
+  const scratch = document.createElement('canvas')
+  const paint = scratch.getContext('2d', { willReadFrequently: false, alpha: false })
+
+  function source(video: HTMLVideoElement): HTMLVideoElement | HTMLCanvasElement {
+    const width = config.vision.inferenceWidth
+    if (paint === null || width <= 0 || video.videoWidth === 0 || width >= video.videoWidth) {
+      return video
+    }
+
+    const height = Math.round((width * video.videoHeight) / video.videoWidth)
+    if (scratch.width !== width || scratch.height !== height) {
+      scratch.width = width
+      scratch.height = height
+    }
+
+    paint.drawImage(video, 0, 0, width, height)
+    return scratch
+  }
+
   return {
     detect(video, timestampMs) {
       if (video.currentTime === lastVideoTime) return { frame: lastFrame, fresh: false }
       lastVideoTime = video.currentTime
 
-      const result = landmarker.detectForVideo(video, timestampMs)
+      const result = landmarker.detectForVideo(source(video), timestampMs)
       lastFrame = route(result, config.vision.swapHands)
       return { frame: lastFrame, fresh: true }
     },

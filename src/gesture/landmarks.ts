@@ -39,12 +39,44 @@ export const FINGER_BIT = {
 } as const
 
 /** The four fingers that fold along the same axis and can share one test. The thumb
- *  needs its own, which is why it is absent here. */
+ *  needs its own, which is why it is absent here.
+ *
+ *  All four joints are named because extension is measured as the tip's distance from the
+ *  knuckle divided by the finger's *own* bone lengths — which needs every joint, and is
+ *  what lets one threshold cover a pinky and a middle finger alike. */
 export const HINGED_FINGERS = [
-  { name: 'index', bit: FINGER_BIT.INDEX, mcp: LANDMARK.INDEX_MCP, tip: LANDMARK.INDEX_TIP },
-  { name: 'middle', bit: FINGER_BIT.MIDDLE, mcp: LANDMARK.MIDDLE_MCP, tip: LANDMARK.MIDDLE_TIP },
-  { name: 'ring', bit: FINGER_BIT.RING, mcp: LANDMARK.RING_MCP, tip: LANDMARK.RING_TIP },
-  { name: 'pinky', bit: FINGER_BIT.PINKY, mcp: LANDMARK.PINKY_MCP, tip: LANDMARK.PINKY_TIP },
+  {
+    name: 'index',
+    bit: FINGER_BIT.INDEX,
+    mcp: LANDMARK.INDEX_MCP,
+    pip: LANDMARK.INDEX_PIP,
+    dip: LANDMARK.INDEX_DIP,
+    tip: LANDMARK.INDEX_TIP,
+  },
+  {
+    name: 'middle',
+    bit: FINGER_BIT.MIDDLE,
+    mcp: LANDMARK.MIDDLE_MCP,
+    pip: LANDMARK.MIDDLE_PIP,
+    dip: LANDMARK.MIDDLE_DIP,
+    tip: LANDMARK.MIDDLE_TIP,
+  },
+  {
+    name: 'ring',
+    bit: FINGER_BIT.RING,
+    mcp: LANDMARK.RING_MCP,
+    pip: LANDMARK.RING_PIP,
+    dip: LANDMARK.RING_DIP,
+    tip: LANDMARK.RING_TIP,
+  },
+  {
+    name: 'pinky',
+    bit: FINGER_BIT.PINKY,
+    mcp: LANDMARK.PINKY_MCP,
+    pip: LANDMARK.PINKY_PIP,
+    dip: LANDMARK.PINKY_DIP,
+    tip: LANDMARK.PINKY_TIP,
+  },
 ] as const
 
 /** Pairs of landmark indices to draw as bones in the overlay. */

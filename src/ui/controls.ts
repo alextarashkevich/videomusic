@@ -1,4 +1,4 @@
-import type { Config } from '../config'
+import { defaultConfig, type Config } from '../config'
 
 /**
  * One tunable number.
@@ -19,6 +19,31 @@ export type Control = {
   hint: string
 }
 
+/**
+ * Puts any stored number that sits outside its slider's range back to the default.
+ *
+ * Config is merged from localStorage on every load, and a value that has drifted out of
+ * range — left by an older build, or by a key that has since changed meaning — cannot be
+ * corrected from the panel, because the slider cannot reach it. One of these silenced the
+ * instrument outright: an extension threshold above 1.0, which the measurement can never
+ * exceed, so every finger read as folded, no gesture ever matched, and nothing in the
+ * readout said why.
+ *
+ * Reset rather than clamped to the nearest bound. A value nobody could have chosen is not a
+ * preference worth approximating, and clamping lands on the extreme end of the range —
+ * which for a threshold means the strictest possible setting, i.e. very nearly the same
+ * failure it was rescuing from.
+ *
+ * Ranges live here, next to the controls, so one place knows them.
+ */
+export function repairConfig(config: Config): void {
+  for (const control of CONTROLS) {
+    const value = control.get(config)
+    if (Number.isFinite(value) && value >= control.min && value <= control.max) continue
+    control.set(config, control.get(defaultConfig))
+  }
+}
+
 const degrees = (value: number) => `${value.toFixed(0)}°`
 const ms = (value: number) => `${(value * 1000).toFixed(0)} ms`
 const frames = (value: number) => `${value.toFixed(0)} fr`
@@ -27,14 +52,14 @@ export const CONTROLS: readonly Control[] = [
   {
     group: 'Recognition',
     label: 'Finger extension',
-    min: 0.15,
-    max: 0.8,
+    min: 0.05,
+    max: 0.95,
     step: 0.01,
-    get: (c) => c.gesture.extendedReach,
+    get: (c) => c.gesture.extendedProjection,
     set: (c, v) => {
-      c.gesture.extendedReach = v
+      c.gesture.extendedProjection = v
     },
-    hint: 'How far a fingertip must be from its knuckle to count as up, in hand widths. The readout shows the live measurement per finger — hold up one finger, then two, and put this between the two sets of numbers.',
+    hint: 'How far out a finger must reach to count as up. About 1.00 held out, near 0 folded away — including folded down at the base while staying straight, which is how a pinky usually drops. The readout shows the live number per finger; hold up three and put this between the two groups.',
   },
   {
     group: 'Recognition',
@@ -64,6 +89,19 @@ export const CONTROLS: readonly Control[] = [
   },
   {
     group: 'Recognition',
+    label: 'Detect at width',
+    min: 192,
+    max: 1280,
+    step: 64,
+    format: (value) => `${value.toFixed(0)} px`,
+    get: (c) => c.vision.inferenceWidth,
+    set: (c, v) => {
+      c.vision.inferenceWidth = v
+    },
+    hint: 'How large a picture the detector is given. It works at 192×192 whatever it gets, so most of a full-size frame is uploaded and thrown away. The picture on screen is unaffected. Watch the detect figure in the readout as you drag this — and if recognition suffers at the far end, that is what the far end is for.',
+  },
+  {
+    group: 'Recognition',
     label: 'Hand-lost tolerance',
     min: 1,
     max: 40,
@@ -78,29 +116,29 @@ export const CONTROLS: readonly Control[] = [
 
   {
     group: 'Major / minor',
-    label: 'Major below',
-    min: 2,
-    max: 45,
+    label: 'Major above',
+    min: 20,
+    max: 80,
     step: 1,
     format: degrees,
-    get: (c) => c.quality.majorBelowDeg,
+    get: (c) => c.quality.majorAboveDeg,
     set: (c, v) => {
-      c.quality.majorBelowDeg = v
+      c.quality.majorAboveDeg = v
     },
-    hint: 'Tilt under this is major.',
+    hint: 'Shaping-hand thumb swung out past this and the chord is major. The readout shows the live angle beside it — hold the thumb out, then tuck it, and put these two either side of the gap.',
   },
   {
     group: 'Major / minor',
-    label: 'Minor above',
+    label: 'Minor below',
     min: 5,
-    max: 75,
+    max: 60,
     step: 1,
     format: degrees,
-    get: (c) => c.quality.minorAboveDeg,
+    get: (c) => c.quality.minorBelowDeg,
     set: (c, v) => {
-      c.quality.minorAboveDeg = v
+      c.quality.minorBelowDeg = v
     },
-    hint: 'Tilt over this is minor. The gap between the two is what stops it flickering — keep them apart.',
+    hint: 'Thumb tucked in tighter than this and the chord is minor. The gap between the two is what stops a thumb resting near the boundary flipping the chord several times a second — keep them apart.',
   },
 
   {
@@ -179,7 +217,7 @@ export const CONTROLS: readonly Control[] = [
     set: (c, v) => {
       c.smoothing.alpha = v
     },
-    hint: 'Lower is smoother but laggier. Affects volume and distortion.',
+    hint: 'Lower is smoother but laggier. Affects volume and the left wrist tilt.',
   },
   {
     group: 'Feel',

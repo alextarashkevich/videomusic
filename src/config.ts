@@ -9,29 +9,50 @@
  */
 export type Config = {
   gesture: {
-    /** How far a fingertip must sit from its own knuckle to count as extended, in hand
-     *  widths. Measured from the knuckle rather than the middle joint because the joint
-     *  moves outward as a finger curls, chasing the tip and hiding the difference. */
-    extendedReach: number
+    /** How far out a finger must reach to count as up — how far its tip has travelled from
+     *  its knuckle *in the direction that knuckle points*, over the finger's own bone
+     *  lengths. See gesture/fingers.ts; asking which way a finger points rather than only
+     *  how straight it is, is what stops a pinky dropped at its base from counting as
+     *  raised. About 1.0 held out, near 0 folded away, negative in a fist. */
+    extendedProjection: number
     /** The thumb does not curl like the others, so it is judged by how far it is swung
      *  away from the line of the palm, in degrees. An angle between two directions on
      *  the same hand is unaffected by hand size, by rotation, or by what the other
      *  fingers are doing — none of which was true of the distance it replaced. */
     thumbAngleDeg: number
-    /** Frames a new hand shape must persist before it takes effect. At ~30 fps this is
-     *  the delay between moving your fingers and hearing it. */
+    /** Camera frames a new hand shape must persist before it takes effect — directly, the
+     *  delay between moving your fingers and hearing it. One frame is enough now that the
+     *  shapes themselves are told apart cleanly; it was two to paper over a measurement
+     *  that put коза and four fingers within a whisker of each other. */
     stabilityFrames: number
     /** Frames the right hand may go missing before the sound fades out. Tracking drops
      *  the odd frame; without this tolerance those blink through as dropouts. This is a
      *  safety net, not the gate — the gate is the left fist. */
     handLostFrames: number
+    /** Calibrated recognition only. How far outside a gesture's own recorded spread a hand
+     *  may sit and still be called that gesture. Lower is stricter: more shapes get called
+     *  nothing at all, which means the chord holds rather than jumping somewhere wrong. */
+    radiusFactor: number
+    /** Calibrated recognition only. How much closer the best match must be than the second
+     *  best before it is believed. At 1.0 it always commits to something; higher means it
+     *  keeps quiet when two gestures look alike. */
+    marginRatio: number
   }
   quality: {
-    /** Below this tilt the chord is major. */
-    majorBelowDeg: number
-    /** Above this tilt it is minor. The gap between the two is hysteresis — without it
-     *  a hand held near the boundary flickers between major and minor. */
-    minorAboveDeg: number
+    /**
+     * Thumb on the *shaping* hand, in degrees off the palm. Out is major, tucked is minor.
+     *
+     * This used to be a lean of the chord hand, and it asked one hand to do two things at
+     * once — where the second actively spoiled the first, because a rotated hand is a
+     * harder hand for the tracker to read, exactly when it is being asked for a shape.
+     * Putting the choice on the other hand separates them: the chord hand only ever has to
+     * hold a shape square to the camera.
+     */
+    majorAboveDeg: number
+    /** Below this the chord is minor. The gap between the two is hysteresis — without it a
+     *  thumb resting near the boundary flickers the chord between major and minor several
+     *  times a second. */
+    minorBelowDeg: number
   }
   tilt: {
     /** Left-hand wrist angle mapped onto 0..1. Drives the visuals; there is no audio
@@ -79,6 +100,16 @@ export type Config = {
      *  vision/handTracker.ts. Flip it if the wrong hand is choosing notes. */
     swapHands: boolean
     /**
+     * Width the camera picture is shrunk to before the detector sees it, in pixels.
+     *
+     * The model resizes whatever it is given down to 192×192, so handing it the full
+     * 1280×720 frame spends most of the per-frame cost uploading pixels that are discarded
+     * a moment later. The picture on screen is unaffected — this is only what the detector
+     * looks at. Set it at or above the camera's own width to turn it off; the `detect`
+     * figure in the readout is how to tell whether it is earning its place.
+     */
+    inferenceWidth: number
+    /**
      * Measure hand shape from the tracker's 3D world coordinates rather than the flat
      * image.
      *
@@ -93,14 +124,23 @@ export type Config = {
 
 export const defaultConfig: Config = {
   gesture: {
-    extendedReach: 0.45,
+    // Extended reads about 1.0 and folded lands at or below 0, whichever way it was folded,
+    // so half way between them is a genuinely wide place to stand. The measurement this
+    // replaced had 0.69 against 0.85 and no room at all.
+    extendedProjection: 0.5,
     thumbAngleDeg: 35,
-    stabilityFrames: 2,
+    stabilityFrames: 1,
     handLostFrames: 8,
+    radiusFactor: 2.5,
+    marginRatio: 1.15,
   },
   quality: {
-    majorBelowDeg: 20,
-    minorAboveDeg: 30,
+    // Measured on Alex's camera: a tucked thumb reads about 25° and an out one about 39°,
+    // so a single line at 30 sits between them. The two numbers being equal means no dead
+    // band by default — a thumb parked exactly on the line can flicker, and widening them
+    // apart in the tuning panel is the cure if it ever does.
+    majorAboveDeg: 30,
+    minorBelowDeg: 30,
   },
   tilt: {
     minDeg: 8,
@@ -122,13 +162,14 @@ export const defaultConfig: Config = {
     scale: [0, 2, 4, 5, 7, 9, 11],
   },
   sound: {
-    preset: 'Organ',
+    preset: 'Clean synth',
   },
   vision: {
     minHandDetectionConfidence: 0.5,
     minHandPresenceConfidence: 0.5,
     minTrackingConfidence: 0.5,
     swapHands: false,
+    inferenceWidth: 512,
     use3d: true,
   },
 }
@@ -144,9 +185,21 @@ export function loadConfig(): Config {
   try {
     const stored = JSON.parse(raw) as Partial<Config>
     const merged = structuredClone(defaultConfig)
-    for (const key of Object.keys(merged) as (keyof Config)[]) {
-      Object.assign(merged[key], stored[key] ?? {})
+
+    for (const group of Object.keys(merged) as (keyof Config)[]) {
+      const saved = stored[group] as Record<string, unknown> | undefined
+      if (saved === undefined) continue
+
+      // Only settings this build still has, rather than everything that was ever written.
+      // A key that has been renamed or dropped otherwise lives in localStorage for ever,
+      // and a stale one carrying a value from when it meant something else is how a
+      // threshold ends up somewhere nothing could have put it.
+      const target = merged[group] as Record<string, unknown>
+      for (const key of Object.keys(target)) {
+        if (key in saved) target[key] = saved[key]
+      }
     }
+
     return merged
   } catch {
     return structuredClone(defaultConfig)

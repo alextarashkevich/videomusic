@@ -7,15 +7,11 @@ export function clamp01(value: number): number {
 }
 
 /**
- * How far the palm leans from vertical, in degrees.
+ * How far the palm leans from vertical, in degrees, in *landmark* space.
  *
  * Measured along the wrist-to-middle-knuckle axis, which is the most stable line on the
  * hand — it barely moves as the fingers open and close, so tilt stays readable whatever
  * gesture is being held.
- *
- * The sign is deliberately ignored by every caller: both readings that use this take the
- * absolute value, so the display being mirrored while the landmarks are not never
- * becomes a source of confusion.
  */
 export function tiltDegrees(landmarks: Landmarks): number {
   const wrist = landmarks[LANDMARK.WRIST]

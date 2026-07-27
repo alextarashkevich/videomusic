@@ -8,6 +8,10 @@ export type TuningPanel = {
   /** Fires whenever the panel opens or closes, so whatever shares the right-hand side
    *  of the screen can get out of the way. */
   onToggle: (listener: (open: boolean) => void) => void
+  /** Re-reads every control from the config. Needed because some settings are also set
+   *  from outside the panel — calibration writes several of them — and a slider showing a
+   *  stale number is worse than no slider. */
+  refresh: () => void
   dispose: () => void
 }
 
@@ -111,6 +115,9 @@ export function createTuningPanel(config: Config): TuningPanel {
     },
     toggle: () => setOpen(panel.hidden),
     onToggle: (listener) => listeners.push(listener),
+    refresh: () => {
+      for (const refresh of refreshers) refresh()
+    },
     dispose: () => panel.remove(),
   }
 }

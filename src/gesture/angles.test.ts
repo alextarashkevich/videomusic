@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { defaultConfig } from '../config'
-import { tiltAmount, heightFraction, tiltDegrees, tiltMagnitude } from './angles'
+import { heightFraction, tiltAmount, tiltDegrees, tiltMagnitude } from './angles'
 import { GESTURES, makeHand } from './testHands'
 
 describe('tiltDegrees', () => {

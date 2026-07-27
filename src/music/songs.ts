@@ -35,7 +35,7 @@ export const SONGS: readonly Song[] = [
     title: 'Creep',
     artist: 'Radiohead',
     progression: [major(1), major(3), major(4), minor(4)],
-    note: 'The last two are the same fingers — only the wrist turns. This is the tilt.',
+    note: 'The last two are the same fingers — only the other hand’s thumb moves.',
   },
   {
     title: '(Don’t Fear) The Reaper',
@@ -47,7 +47,7 @@ export const SONGS: readonly Song[] = [
     title: 'Wonderwall',
     artist: 'Oasis',
     progression: [minor(6), major(1), major(5), major(2)],
-    note: 'The last chord is the second degree turned major — tilt it.',
+    note: 'The last chord is the second degree turned major — thumb out for it.',
   },
   {
     title: 'Dust in the Wind',

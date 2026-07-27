@@ -79,10 +79,12 @@ export function createSongGuide(config: Config): SongGuide {
 
       const gesture = document.createElement('span')
       gesture.className = 'song-gesture'
+      // Quality lives on the other hand now, so the guide names what each hand does rather
+      // than folding both into one instruction.
       gesture.textContent =
         chord.quality === 'minor'
-          ? `${GESTURE_FOR_DEGREE[chord.degree]}, tilted`
-          : GESTURE_FOR_DEGREE[chord.degree]
+          ? `${GESTURE_FOR_DEGREE[chord.degree]} · thumb in`
+          : `${GESTURE_FOR_DEGREE[chord.degree]} · thumb out`
 
       row.append(numeral, named, gesture)
       list.append(row)

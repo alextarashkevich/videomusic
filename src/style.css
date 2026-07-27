@@ -329,6 +329,89 @@ body {
   white-space: pre;
 }
 
+/* Calibration — centred, because it is the one thing here that asks for your attention
+   rather than sitting beside what you are doing. */
+#calibrate {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 24px;
+  background: rgb(7 7 11 / 78%);
+  backdrop-filter: blur(10px);
+  text-align: center;
+}
+
+#calibrate[hidden] {
+  display: none;
+}
+
+.calibrate-heading {
+  color: #6f6f85;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.calibrate-shape {
+  font-size: 34px;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.calibrate-detail {
+  max-width: 34ch;
+  margin: 0;
+  color: #9a9ab0;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.calibrate-status {
+  margin-top: 6px;
+  color: #d8d8e6;
+  font-size: 13px;
+}
+
+.calibrate-meter {
+  width: min(280px, 60vw);
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: rgb(255 255 255 / 10%);
+}
+
+.calibrate-meter span {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: 2px;
+  background: #7d7dff;
+  transition: width 0.06s linear;
+}
+
+.calibrate-cancel {
+  margin-top: 10px;
+  padding: 7px 16px;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 8px;
+  background: transparent;
+  color: #9a9ab0;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.calibrate-cancel:hover {
+  border-color: rgb(255 255 255 / 28%);
+  color: #d8d8e6;
+}
+
 /* Tuning panel — thresholds that can only be found by feel, adjustable while playing. */
 #tuning {
   position: absolute;

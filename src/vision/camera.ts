@@ -1,5 +1,21 @@
 export type CameraHandle = {
   video: HTMLVideoElement
+  /** What the camera actually agreed to, which is rarely what was asked for. Shown in the
+   *  readout because the frame period is the largest single term in the instrument's
+   *  latency and there was previously no way to find out what it was. */
+  settings: MediaTrackSettings
+  /**
+   * Runs `callback` once per delivered camera frame.
+   *
+   * Uses `requestVideoFrameCallback`, which fires when a picture actually arrives, rather
+   * than an animation frame, which fires when the display is ready and has to be asked
+   * every time whether anything new has turned up. At 30 fps against a 60 Hz screen that
+   * polling added up to half a frame of latency for nothing, and ran the detector's
+   * bookkeeping twice as often as there was anything to detect.
+   *
+   * Falls back to `requestAnimationFrame` where the callback is unavailable.
+   */
+  onFrame: (callback: (timestampMs: number) => void) => void
   stop: () => void
 }
 
@@ -42,6 +58,11 @@ export async function startCamera(video: HTMLVideoElement): Promise<CameraHandle
         facingMode: 'user',
         width: { ideal: 1280 },
         height: { ideal: 720 },
+        // Asked for, not required. A camera that can do 60 halves the wait between moving
+        // your hand and the picture of it existing — 33 ms down to 16 — which is the
+        // biggest single saving available anywhere in the chain. One that cannot will
+        // quietly give 30 instead, so there is nothing to lose by asking.
+        frameRate: { ideal: 60 },
       },
       audio: false,
     })
@@ -60,9 +81,28 @@ export async function startCamera(video: HTMLVideoElement): Promise<CameraHandle
     })
   }
 
+  let running = true
+
   return {
     video,
+    settings: stream.getVideoTracks()[0]?.getSettings() ?? {},
+
+    onFrame(callback) {
+      const perFrame = 'requestVideoFrameCallback' in video
+
+      const step = (now: number): void => {
+        if (!running) return
+        callback(now)
+        if (perFrame) video.requestVideoFrameCallback(step)
+        else requestAnimationFrame(step)
+      }
+
+      if (perFrame) video.requestVideoFrameCallback(step)
+      else requestAnimationFrame(step)
+    },
+
     stop: () => {
+      running = false
       for (const track of stream.getTracks()) track.stop()
       video.srcObject = null
     },

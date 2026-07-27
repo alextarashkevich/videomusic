@@ -49,22 +49,11 @@ describe('right hand chooses the degree', () => {
     })
   }
 
-  // Holding the ring finger up while the pinky stays down is an awkward hand; counting
-  // three on the thumb, index and middle is not, and is how much of Europe does it.
-  it('accepts three counted the German way as well', () => {
-    const state = hold({ right: hand(GESTURES.threeGerman), left: openLeft() })
-    expect(state.degree).toBe(3)
-  })
-
-  it('gives both shapes for three the same chord', () => {
-    const german = hold({ right: hand(GESTURES.threeGerman), left: openLeft() })
-    interpreter.reset()
-    const other = hold({ right: hand(GESTURES.three), left: openLeft() })
-    expect(german.degree).toBe(other.degree)
-  })
-
-  it('does not confuse the German three with any other gesture', () => {
-    for (const name of ['one', 'two', 'four', 'open', 'koza', 'kozaThumb'] as const) {
+  // Three briefly had a second spelling — thumb, index and middle, the way much of Europe
+  // counts it. It went again: one shape per degree means a shape you did not intend cannot
+  // land on a degree you did not want.
+  it('gives three exactly one hand shape', () => {
+    for (const name of ['one', 'two', 'four', 'open', 'koza', 'kozaThumb', 'fist'] as const) {
       interpreter.reset()
       const state = hold({ right: hand(GESTURES[name]), left: openLeft() })
       expect(state.degree, name).not.toBe(3)
@@ -72,8 +61,16 @@ describe('right hand chooses the degree', () => {
   })
 
   it('plays nothing until a recognised gesture has been held', () => {
+    config.gesture.stabilityFrames = 3
     const state = interpreter.update({ right: hand(GESTURES.one), left: openLeft() })
     expect(state.degree).toBeNull()
+  })
+
+  // The default is one frame — the shapes are told apart cleanly enough now that waiting
+  // for a second sighting buys nothing and costs a camera frame of delay.
+  it('sounds on the first frame at the default setting', () => {
+    const state = interpreter.update({ right: hand(GESTURES.one), left: openLeft() })
+    expect(state.degree).toBe(1)
   })
 
   it('holds the last degree through an unrecognised shape', () => {
@@ -116,34 +113,67 @@ describe('right hand chooses the degree', () => {
   })
 })
 
-describe('right hand tilt chooses major or minor', () => {
-  it('is major with the hand upright', () => {
-    const state = hold({ right: hand(GESTURES.one), left: openLeft() })
-    expect(state.quality).toBe('major')
+describe('the shaping hand’s thumb chooses major or minor', () => {
+  // It used to be a lean of the *chord* hand, which asked one hand to do two things at once
+  // — and the second spoiled the first, because a rotated hand is a harder hand to read a
+  // shape from. Moving it to the other hand separates them: the chord hand only ever has to
+  // hold a shape square to the camera.
+  const thumbOut = (options?: HandOptions) => hand(GESTURES.open, options)
+  const thumbIn = (options?: HandOptions) => hand(GESTURES.four, options)
+
+  it('is major with the thumb out and minor with it tucked', () => {
+    expect(hold({ right: hand(GESTURES.one), left: thumbOut() }).quality).toBe('major')
+
+    interpreter.reset()
+    expect(hold({ right: hand(GESTURES.one), left: thumbIn() }).quality).toBe('minor')
   })
 
-  it('is minor past the tilt threshold', () => {
-    const tilt = config.quality.minorAboveDeg + 10
-    const state = hold({ right: hand(GESTURES.one, { tilt }), left: openLeft() })
-    expect(state.quality).toBe('minor')
+  it('leaves the chord hand free to be anything, at any angle', () => {
+    for (const gesture of ['one', 'two', 'three', 'koza', 'kozaThumb'] as const) {
+      for (const tilt of [-40, 0, 40]) {
+        interpreter.reset()
+        const state = hold({ right: hand(GESTURES[gesture], { tilt }), left: thumbIn() })
+        expect(state.quality, `${gesture} @ ${tilt}°`).toBe('minor')
+      }
+    }
   })
 
-  it('turns minor whichever way the hand leans', () => {
-    const tilt = -(config.quality.minorAboveDeg + 10)
-    const state = hold({ right: hand(GESTURES.one, { tilt }), left: openLeft() })
-    expect(state.quality).toBe('minor')
-  })
-
+  // A thumb hovering near the boundary would otherwise flip the chord several times a
+  // second, which is worse than either answer.
   it('holds its choice inside the dead band rather than flickering', () => {
-    const between = (config.quality.majorBelowDeg + config.quality.minorAboveDeg) / 2
+    const { majorAboveDeg, minorBelowDeg } = config.quality
+    const between = (majorAboveDeg + minorBelowDeg) / 2
+    // Squeeze the band around the tucked thumb so both fixtures sit outside it, then widen
+    // it so the same hands land in between.
+    config.quality.majorAboveDeg = 200
+    config.quality.minorBelowDeg = 200
+    expect(hold({ right: hand(GESTURES.one), left: thumbOut() }).quality).toBe('minor')
 
-    hold({ right: hand(GESTURES.one, { tilt: config.quality.minorAboveDeg + 5 }), left: openLeft() })
-    expect(hold({ right: hand(GESTURES.one, { tilt: between }), left: openLeft() }).quality)
-      .toBe('minor')
+    config.quality.majorAboveDeg = between
+    config.quality.minorBelowDeg = 0
+    expect(hold({ right: hand(GESTURES.one), left: thumbIn() }).quality).toBe('minor')
+  })
 
-    hold({ right: hand(GESTURES.one, { tilt: 0 }), left: openLeft() })
-    expect(hold({ right: hand(GESTURES.one, { tilt: between }), left: openLeft() }).quality)
-      .toBe('major')
+  it('holds the quality while the shaping hand is out of shot', () => {
+    hold({ right: hand(GESTURES.one), left: thumbOut() })
+    const gone = hold({ right: hand(GESTURES.one), left: null })
+    expect(gone.quality).toBe('major')
+  })
+
+  // The thumb now means quality on this hand, so the density lookup must not see it — and a
+  // closed hand is the mute whether the thumb is tucked in with it or stuck up beside it.
+  it('reads the same density with the thumb out as with it in', () => {
+    const out = hold({ right: hand(GESTURES.one), left: hand(GESTURES.open) })
+    interpreter.reset()
+    const tucked = hold({ right: hand(GESTURES.one), left: hand(GESTURES.four) })
+    expect(out.density).toBe(tucked.density)
+  })
+
+  it('mutes on a closed hand whichever way the thumb is pointing', () => {
+    const thumbsUp: FingerStates = { thumb: true, index: 1, middle: 1, ring: 1, pinky: 1 }
+    expect(hold({ right: hand(GESTURES.one), left: hand(GESTURES.fist) }).gate).toBe(false)
+    interpreter.reset()
+    expect(hold({ right: hand(GESTURES.one), left: hand(thumbsUp) }).gate).toBe(false)
   })
 })
 
@@ -287,6 +317,7 @@ describe('repeated camera frames', () => {
   })
 
   it('needs the configured number of genuinely new frames', () => {
+    config.gesture.stabilityFrames = 3
     const frame = { right: hand(GESTURES.koza), left: openLeft() }
 
     for (let i = 0; i < config.gesture.stabilityFrames - 1; i++) {
@@ -323,23 +354,26 @@ describe('live config changes', () => {
     expect(state.degree).toBe(6)
   })
 
-  it('picks up new tilt thresholds without being rebuilt', () => {
-    const frame = { right: hand(GESTURES.one, { tilt: 25 }), left: openLeft() }
+  it('picks up new thumb thresholds without being rebuilt', () => {
+    // An open shaping hand: thumb out, so major to begin with.
+    const frame = { right: hand(GESTURES.one), left: hand(GESTURES.open) }
     expect(hold(frame).quality).toBe('major')
 
-    config.quality.majorBelowDeg = 5
-    config.quality.minorAboveDeg = 10
+    config.quality.majorAboveDeg = 170
+    config.quality.minorBelowDeg = 160
     expect(hold(frame).quality).toBe('minor')
   })
 })
 
 describe('debug readout', () => {
-  it('reports the masks and tilts behind the current state', () => {
-    hold({ right: hand(GESTURES.koza, { tilt: 40 }), left: openLeft() })
+  it('reports the masks and angles behind the current state', () => {
+    hold({ right: hand(GESTURES.koza, { tilt: -40 }), left: hand(GESTURES.open) })
 
     expect(interpreter.debug.rightTilt).toBeCloseTo(40, 4)
     expect(interpreter.debug.rightMask).not.toBeNull()
     expect(interpreter.debug.leftMask).not.toBeNull()
+    // The thumb angle is what chooses major or minor now, so it has to be readable.
+    expect(interpreter.debug.leftThumb).toBeGreaterThan(config.quality.majorAboveDeg)
   })
 
   it('clears a hand mask when that hand is not visible', () => {

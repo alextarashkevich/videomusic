@@ -3,7 +3,8 @@
 A browser instrument played with your hands in front of a webcam. The right hand picks
 *which* chord, the left hand shapes *how* it sounds.
 
-Sound is sustained, like an organ or a theremin: while a gesture is held, the chord rings.
+Most of the sounds are sustained, like an organ or a theremin: while a gesture is held, the
+chord rings. Some are struck instead — see **Sounds** below.
 
 ## Gestures
 
@@ -18,13 +19,13 @@ identity.
 | 1 finger | I |
 | 2 fingers | II |
 | 3 fingers | III |
-| thumb + index + middle | III — the same, counted the German way |
 | 4 fingers | IV |
 | open palm | V |
 | коза (index + pinky) | VI |
 | коза + thumb | VII |
 
-Rotating the wrist switches the chord between **major** (upright) and **minor** (tilted).
+Major or minor is chosen by the **other** hand — see below. The chord hand only ever has to
+hold a shape square to the camera.
 
 ### Left hand — how it sounds
 
@@ -34,9 +35,23 @@ Rotating the wrist switches the chord between **major** (upright) and **minor** 
 | 1 finger | triad |
 | 2 fingers | triad + octave |
 | 3 fingers | seventh chord |
+| thumb out | major |
+| thumb tucked | minor |
 
-Every setting is a chord, and every one contains the third — which is what the wrist tilt
-changes, so major and minor are audible whatever the left hand is doing.
+The thumb is read separately from the fingers, so it is free to choose major or minor
+whatever density you are holding.
+
+This used to be a lean of the chord hand, and it asked one hand to do two things at once —
+where the second actively spoiled the first, because a rotated hand is a harder hand for the
+tracker to read, exactly when it is being asked for a shape. Two hands, two jobs.
+
+Where the boundary sits is a property of a thumb rather than of a number, so the live angle
+is in the readout next to the two thresholds: hold the thumb out, tuck it in, and put them
+either side of the gap. There are two of them rather than one so a thumb resting near the
+boundary cannot flip the chord several times a second.
+
+Every setting is a chord, and every one contains the third — which is what major and minor
+change, so the two are audible whatever density you are holding.
 
 Raising and lowering the hand sets **volume**, down to a floor rather than to nothing:
 dropping your hand thins the sound out, and silence belongs to the fist. Tilting the left
@@ -47,6 +62,58 @@ produces a stray note.
 
 Which physical hand does which job depends on your browser and camera. If the wrong hand
 is choosing chords, turn on **Swap hands** in the tuning panel.
+
+### Calibration
+
+Out of the box, recognition is geometric: a finger counts as up when its tip has reached far
+enough from its knuckle **in the direction that knuckle points**, over that finger's own bone
+lengths.
+
+Both halves of that took a wrong turn first. Measuring against palm width put a short pinky
+two and a half times closer to the threshold than a long middle finger, so коза — the one
+gesture that needs the pinky — was the one that failed. And measuring the plain distance from
+knuckle to tip asks how *straight* a finger is, which is a different question from whether it
+is raised: a finger dropped at its base while staying straight along its length is still
+perfectly straight, and read as up. That is how three fingers played as four.
+
+Press `C` and it stops guessing. The walkthrough shows each gesture in turn, records about
+a second and a half of your hand, and afterwards recognises shapes by comparing them to
+what you actually did. It asks you to turn and tilt your hand while it records, and that is
+the important part — the instrument is played with the hand leaning, so a gesture captured
+from one angle is a gesture recognised from one angle.
+
+The measured difference, against generated hands with tracker noise: for almost anyone the
+rules are now perfect and calibration buys nothing. They still run out at the edge — a hand
+that barely moves its fingers at all, a quarter of the way, falls to under 40% where a
+calibration gets essentially all of them. One threshold standing in for everybody works for
+most of everybody, and calibration is for the rest.
+
+Nothing leaves the browser. The model is a few thousand numbers in `localStorage`, and
+pressing `C` again clears it.
+
+## Sounds
+
+Eight of them, in two kinds.
+
+**Held** — Clean synth, Organ, Warm pad, Strings, Glass. Four oscillators attacked once
+when the instrument starts and never triggered again; everything audible is done with
+gains. There is no note-on latency at all, and the fist fades rather than cutting because
+there is nothing to cut.
+
+**Struck** — Piano, E-piano, Pluck. These re-attack whenever the chord changes, and then
+ring out and fade on their own. That makes them play differently: holding a gesture is
+holding a chord that is dying, not one that is sustaining, so you change gesture to play
+again. Because the left hand's density is part of the chord, reaching for a seventh also
+re-strikes — which turns out to be the natural "hit it again" gesture.
+
+**Piano** is a recorded one, not a synthesised imitation: Salamander Grand Piano by
+Alexander Holm, [CC-BY 3.0](https://creativecommons.org/licenses/by/3.0/), one sample every
+minor third from C1 to C7. About 1.8 MB, committed to the repo and served from our own
+origin like everything else here. It loads the first time you choose it rather than at
+startup, so nobody waits for a piano they were not going to play.
+
+Presets are level-matched so switching one changes the sound and not the volume. The
+numbers are measured rather than guessed — load the app with `?trims=1` and it prints them.
 
 ### Inversions
 
@@ -66,8 +133,9 @@ so they work on any keyboard layout.
 | `T` | tuning panel — every threshold, adjustable while playing |
 | `⇧G` | show or hide the song guide |
 | `G` | next song |
-| `1`–`5` | synth: Organ, Warm pad, Rock organ, Strings, Glass |
+| `1`–`8` | sound: Clean synth, Piano, E-piano, Pluck, Organ, Warm pad, Strings, Glass |
 | `X` | swap which hand plays chords |
+| `C` | calibrate — hold each gesture once; press again to clear |
 | `H` | hide the readout and the buttons |
 | `S` | hide the hand skeleton |
 
@@ -80,9 +148,9 @@ moment, and it steps on. Nothing pushes.
 
 Progressions are stored as scale degrees, so they follow whichever root and scale the
 instrument is set to. **Creep** is the one to try first — its last two chords are the same
-fingers with the wrist turned, which is the tilt gesture and nothing else. Several of the
-others (Wonderwall, Dust in the Wind, Stairway) need the second degree played major, which
-is only reachable by tilting too.
+fingers on the chord hand, with only the other hand's thumb moving. Several of the others
+(Wonderwall, Dust in the Wind, Stairway) need the second degree played major, which is the
+same gesture again.
 
 ## Latency
 
@@ -92,11 +160,11 @@ There is some, and it is mostly deliberate:
 | --- | --- |
 | camera capture and transport | ~40 ms |
 | hand tracking | 10–20 ms, shown live in the readout |
-| stability gate, 2 frames at 30 fps | ~66 ms |
+| stability gate, 1 frame at 30 fps | ~33 ms |
 | glide and parameter ramp | ~100 ms |
 | audio lookahead | 20 ms |
 
-Around 200 ms on a chord change. Volume skips the stability gate and lands nearer 150 ms. Every one of those numbers is a slider in the tuning panel —
+Around 100 ms on a chord change. Volume skips the stability gate and lands lower still. Every one of those numbers is a slider in the tuning panel —
 shortening the stability gate is the biggest win, at the cost of the occasional stray
 chord while your fingers are still moving.
 
