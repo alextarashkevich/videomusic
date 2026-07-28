@@ -5,18 +5,23 @@ import { measureTrims } from './audio/trims'
 import { chordLabel } from './audio/voicing'
 import { loadConfig, saveConfig } from './config'
 import { describeMask } from './gesture/fingers'
-import { createInterpreter, type InterpreterDebug } from './gesture/interpret'
+import { createInterpreter, type RoleDebug } from './gesture/interpret'
 import { clearCalibration, loadCalibration, saveCalibration } from './gesture/modelStore'
+import { createTransitionLog } from './gesture/transitions'
 import type { HandFrame, PerformanceState } from './types'
 import { createCalibrator } from './ui/calibrate'
+import { createChordDisplay } from './ui/chordDisplay'
 import { repairConfig } from './ui/controls'
+import { loadSongs } from './music/songStore'
+import { createSongBuilder } from './ui/songBuilder'
 import { createSongGuide } from './ui/songGuide'
 import { createToolbar } from './ui/toolbar'
+import { createTutorial, tutorialSeen } from './ui/tutorial'
 import { createTuningPanel } from './ui/tuning'
 import { startCamera } from './vision/camera'
 import { createHandTracker } from './vision/handTracker'
 import { createOverlay } from './visual/overlay'
-import { createVisualizer } from './visual/scene'
+import { createVisualizer } from './visual/rim'
 
 const video = document.querySelector<HTMLVideoElement>('#video')!
 const sceneCanvas = document.querySelector<HTMLCanvasElement>('#scene')!
@@ -65,17 +70,17 @@ function bar(value: number, width = 12): string {
  * numbers the decision turns on makes the difference readable at a glance, which it was not
  * when this last silenced the instrument.
  */
-function gateOf(debug: InterpreterDebug, marginRatio: number): string {
-  if (!debug.calibrated) return 'rules — press C to calibrate'
+function gateOf(role: RoleDebug, marginRatio: number): string {
+  if (!role.calibrated) return 'rules — press C to calibrate'
 
   const why =
-    debug.distance > debug.radius
+    role.distance > role.radius
       ? '  too far'
-      : debug.margin < marginRatio
+      : role.margin < marginRatio
         ? '  too close to call'
         : ''
 
-  return `calibrated  dist ${debug.distance.toFixed(2)}/${debug.radius.toFixed(2)}  margin ${debug.margin.toFixed(2)}${why}`
+  return `calibrated  dist ${role.distance.toFixed(2)}/${role.radius.toFixed(2)}  margin ${role.margin.toFixed(2)}${why}`
 }
 
 function showError(message: string): void {
@@ -114,6 +119,16 @@ async function start(): Promise<void> {
   const tuning = createTuningPanel(config)
   const guide = createSongGuide(config)
   const calibrator = createCalibrator(config)
+  const chords = createChordDisplay(config)
+  const tutorial = createTutorial()
+  const builder = createSongBuilder(config)
+
+  // Diagnostics: how long both hands take to agree on a chord change. Nothing reads it but
+  // the readout — see gesture/transitions.ts for why the number is worth having.
+  const transitions = createTransitionLog()
+
+  guide.setCustom(loadSongs())
+  builder.onChange((songs) => guide.setCustom(songs))
 
   let calibration = loadCalibration()
   interpreter.setCalibration(calibration)
@@ -122,7 +137,7 @@ async function start(): Promise<void> {
     calibration = next
     interpreter.setCalibration(next)
     saveCalibration(next)
-    toolbar.refresh()
+    refreshButtons()
   })
 
   // Both live on the right-hand side, and you do not need a song while dragging sliders.
@@ -130,9 +145,13 @@ async function start(): Promise<void> {
 
   startScreen.hidden = true
 
-  // Both readouts can be hidden so the instrument can be filmed without debug furniture
-  // over it. The shader and the sound are unaffected.
-  let showHud = true
+  // Off by default: it is a page of diagnostics, and the first thing a new player sees
+  // should be the instrument, not its instrumentation. `H` and its button bring it back.
+  //
+  // The controls are deliberately *not* tied to this any more. They used to be, so hiding
+  // the readout took every button with it — which meant "hide the debug panel" and "lose
+  // the way to change the sound" were the same keystroke.
+  let showHud = false
   let showSkeleton = true
 
   function cyclePreset(): void {
@@ -146,9 +165,35 @@ async function start(): Promise<void> {
     guide.setVisible(!tuning.open)
   }
 
+  /**
+   * The tutorial gets the screen to itself.
+   *
+   * Watching somebody use it for the first time made the case: the instructions were one of
+   * five things competing for attention, and the newest player had the least idea which of
+   * them mattered. While it runs, everything that is not the instrument or the tutorial goes
+   * away — including the chord chart, which is a second panel telling you which chord to
+   * play next and directly contradicts the first.
+   */
+  function setChromeVisible(visible: boolean): void {
+    guide.setVisible(visible && !tuning.open)
+    chords.setVisible(visible)
+    toolbar.setVisible(visible)
+  }
+
+  function toggleTutorial(): void {
+    if (tutorial.running) tutorial.stop()
+    else {
+      if (tuning.open) tuning.toggle()
+      setChromeVisible(false)
+      tutorial.start()
+    }
+    refreshButtons()
+  }
+
   function toggleHud(): void {
     showHud = !showHud
     if (!showHud) hud.textContent = ''
+    refreshButtons()
   }
 
   function swapHands(): void {
@@ -175,40 +220,95 @@ async function start(): Promise<void> {
     } else {
       calibrator.start()
     }
+    refreshButtons()
+  }
+
+  /**
+   * Everything the instrument can *do*, inside the settings panel.
+   *
+   * There used to be nine of these along the bottom of the screen. Nine buttons is a menu,
+   * and a menu is something you read instead of playing — for a new player it was most of
+   * what was on screen, and none of it was the instrument. One button is left outside.
+   */
+  const actions = createToolbar(
+    [
+      {
+        label: 'Tutorial',
+        key: 'L',
+        title: 'Learn the instrument by playing it — each step waits until you have made the shape.',
+        label2: () => (tutorial.running ? 'Stop tutorial' : 'Tutorial'),
+        onClick: toggleTutorial,
+      },
+      { label: 'Songs', key: '⇧G', onClick: toggleGuide },
+      { label: 'Next song', key: 'G', onClick: () => guide.next() },
+      {
+        label: 'Write a song',
+        key: 'W',
+        title: 'Build a song out of sections and chords. It is saved on this device.',
+        label2: () => (builder.open ? 'Close writer' : 'Write a song'),
+        onClick: () => {
+          builder.toggle()
+          refreshButtons()
+        },
+      },
+      {
+        label: 'Synth',
+        key: '1–5',
+        label2: () => config.sound.preset,
+        onClick: cyclePreset,
+      },
+      {
+        label: 'Swap hands',
+        key: 'X',
+        title: 'If the wrong hand is choosing chords, press this.',
+        label2: () => (config.vision.swapHands ? 'Hands: swapped' : 'Swap hands'),
+        onClick: swapHands,
+      },
+      {
+        label: 'Calibrate',
+        key: 'C',
+        title:
+          'Hold each gesture once and it learns your hands instead of measuring them against numbers someone guessed. Press again to clear it.',
+        label2: () =>
+          calibrator.running ? 'Cancel' : calibration.right !== null ? 'Clear calibration' : 'Calibrate',
+        onClick: toggleCalibration,
+      },
+      {
+        label: 'Readout',
+        key: 'H',
+        title: 'Frame rates, what each hand is being read as, and the numbers behind it.',
+        label2: () => (showHud ? 'Hide readout' : 'Readout'),
+        onClick: toggleHud,
+      },
+      { label: 'Skeleton', key: 'S', onClick: () => (showSkeleton = !showSkeleton) },
+    ],
+    tuning.actions,
+  )
+
+  const toolbar = createToolbar([
+    {
+      label: 'Settings',
+      key: 'T',
+      title: 'Sounds, songs, the tutorial, and every threshold the instrument is judged by.',
+      label2: () => (tuning.open ? 'Close' : 'Settings'),
+      onClick: () => {
+        tuning.toggle()
+        refreshButtons()
+      },
+    },
+  ])
+
+  function refreshButtons(): void {
+    actions.refresh()
     toolbar.refresh()
   }
 
-  const toolbar = createToolbar([
-    { label: 'Tune', key: 'T', onClick: () => tuning.toggle() },
-    { label: 'Songs', key: '⇧G', onClick: toggleGuide },
-    { label: 'Next song', key: 'G', onClick: () => guide.next() },
-    {
-      label: 'Synth',
-      key: '1–8',
-      label2: () => config.sound.preset,
-      onClick: cyclePreset,
-    },
-    {
-      label: 'Swap hands',
-      key: 'X',
-      title: 'If the wrong hand is choosing chords, press this.',
-      label2: () => (config.vision.swapHands ? 'Hands: swapped' : 'Swap hands'),
-      onClick: swapHands,
-    },
-    {
-      label: 'Calibrate',
-      key: 'C',
-      title:
-        'Hold each gesture once and it learns your hands instead of measuring them against numbers someone guessed. Press again to clear it.',
-      label2: () =>
-        calibrator.running ? 'Cancel' : calibration.right !== null ? 'Clear calibration' : 'Calibrate',
-      onClick: toggleCalibration,
-    },
-    { label: 'Readout', key: 'H', onClick: toggleHud },
-    { label: 'Skeleton', key: 'S', onClick: () => (showSkeleton = !showSkeleton) },
-  ])
+  tuning.onToggle(refreshButtons)
 
-  tuning.onToggle(() => toolbar.refresh())
+  tutorial.onEnd(() => {
+    setChromeVisible(true)
+    refreshButtons()
+  })
 
   // Keyed off `code`, the physical key, rather than `key`, the character it produced.
   // On a non-Latin layout `key` for the T key is "е", so every shortcut here silently
@@ -223,12 +323,19 @@ async function start(): Promise<void> {
       if (preset !== undefined) {
         config.sound.preset = preset.name
         saveConfig(config)
-        toolbar.refresh()
+        refreshButtons()
       }
       return
     }
 
     switch (event.code) {
+      case 'KeyL':
+        toggleTutorial()
+        break
+      case 'KeyW':
+        builder.toggle()
+        refreshButtons()
+        break
       case 'KeyT':
         tuning.toggle()
         break
@@ -238,7 +345,7 @@ async function start(): Promise<void> {
         break
       case 'KeyX':
         swapHands()
-        toolbar.refresh()
+        refreshButtons()
         break
       case 'KeyC':
         toggleCalibration()
@@ -248,6 +355,17 @@ async function start(): Promise<void> {
         break
       case 'KeyS':
         showSkeleton = !showSkeleton
+        break
+      case 'KeyR':
+        // Diagnostics, printed rather than drawn: the table is dozens of rows wide and it is
+        // read once, after playing, not watched while playing.
+        if (event.shiftKey) {
+          transitions.reset()
+          console.log('Transition log cleared. Play a while, then press R.')
+        } else {
+          transitions.flush(performance.now())
+          console.log(transitions.report())
+        }
         break
       default:
         return
@@ -275,10 +393,11 @@ async function start(): Promise<void> {
       '',
       `RIGHT  ${rightMask === null ? '  —  ' : describeMask(rightMask)}`,
       `       ${ROMAN[state.degree ?? 0]} ${state.quality}   ${chord}`,
-      `       ${gateOf(interpreter.debug, config.gesture.marginRatio)}`,
+      `       ${gateOf(interpreter.debug.right, config.gesture.marginRatio)}`,
       '',
       `LEFT   ${leftMask === null ? '  —  ' : describeMask(leftMask)}   ${leftTilt.toFixed(0).padStart(3)}°`,
       `       ${state.gate ? 'sound' : 'muted'}   ${['', 'triad', '+octave', '7th'][state.density]}`,
+      `       ${gateOf(interpreter.debug.left, config.gesture.marginRatio)}`,
       `       thumb ${interpreter.debug.leftThumb.toFixed(0).padStart(2)}°   major over ${config.quality.majorAboveDeg}°, minor under ${config.quality.minorBelowDeg}°`,
       '',
       `tilt   ${bar(state.tilt)} ${(state.tilt * 100).toFixed(0).padStart(3)}%`,
@@ -287,6 +406,9 @@ async function start(): Promise<void> {
       `reach  ${reachOf(interpreter.debug.rightReach)}`,
       `       I    M    R    P     thumb`,
       `       up over ${config.gesture.extendedProjection.toFixed(2)}      over ${config.gesture.thumbAngleDeg}°`,
+      '',
+      `hands  ${transitions.summary()}`,
+      `       press R for the full table, ⇧R to start again`,
     ].join('\n')
   }
 
@@ -324,6 +446,10 @@ async function start(): Promise<void> {
     latest = interpreter.update(detection.frame, detection.fresh)
     engine.update(latest)
 
+    // Only fresh frames: a repeat is the same observation seen twice, and feeding it would
+    // make a settled chord look like it had just changed again.
+    if (detection.fresh) transitions.push(latest, now)
+
     frame = detection.frame
     if (detection.fresh) seen++
   })
@@ -334,6 +460,8 @@ async function start(): Promise<void> {
     if (delta > 0) fps += (1000 / delta - fps) * 0.1
 
     guide.update(latest, delta)
+    tutorial.update(latest, delta)
+    chords.update(latest, engine.getNotes())
     visualizer.update(latest, engine.getLevel(), now)
 
     // Redrawing the same skeleton over and over costs a full canvas clear and twenty-one
@@ -351,12 +479,20 @@ async function start(): Promise<void> {
       render(latest)
       lastHud = now
     }
-    toolbar.setVisible(showHud)
 
     requestAnimationFrame(draw)
   }
 
   requestAnimationFrame(draw)
+
+  // Offered once, to somebody who has never played it, and never again — including if they
+  // skipped it. An instrument that keeps explaining itself to a player who already knows is
+  // worse than one that never did.
+  if (!tutorialSeen()) {
+    setChromeVisible(false)
+    tutorial.start()
+    refreshButtons()
+  }
 }
 
 // Loudness measurement, for setting the numbers in presets.ts. Renders offline, so it

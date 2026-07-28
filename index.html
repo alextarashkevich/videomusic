@@ -14,7 +14,7 @@
       <!-- Camera feed, mirrored. Never leaves the device. -->
       <video id="video" playsinline muted></video>
 
-      <!-- Audio-reactive shader background (milestone 6). -->
+      <!-- Audio-reactive glow around the edges of the frame. -->
       <canvas id="scene"></canvas>
 
       <!-- Hand skeleton + debug HUD. -->
@@ -31,20 +31,24 @@
 
         <dl class="legend">
           <div>
-            <dt>Right hand</dt>
+            <dt>Right hand — which chord</dt>
             <dd>1–4 fingers, open palm, коза, коза + thumb — the seven degrees</dd>
-            <dd>Tilt the wrist for minor</dd>
           </div>
           <div>
-            <dt>Left hand</dt>
-            <dd>1 / 2 / 3 fingers — note, octave, full chord</dd>
-            <dd>Fist mutes · tilt drives · height sets volume</dd>
+            <dt>Left hand — how it sounds</dt>
+            <dd>Thumb out for major, tucked in for minor</dd>
+            <dd>1 finger a triad, 2 adds the octave, 3 the seventh</dd>
+            <dd>Fist mutes · height sets volume</dd>
           </div>
         </dl>
 
         <button id="start-button" type="button">Start</button>
         <p id="start-error" hidden></p>
-        <p class="keys"><kbd>T</kbd> tune · <kbd>H</kbd> readout · <kbd>S</kbd> skeleton</p>
+        <p class="keys">
+          First time? The tutorial starts by itself — or press <kbd>L</kbd> any time.<br />
+          <kbd>X</kbd> if the hands are the wrong way round · <kbd>T</kbd> tune ·
+          <kbd>H</kbd> readout
+        </p>
       </div>
     </div>
 

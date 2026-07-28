@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createLatch, createSmoother, createStabilizer } from './stabilizer'
+import { createLatch, createSettler, createSmoother, createStabilizer } from './stabilizer'
 
 describe('createStabilizer', () => {
   it('holds its initial value until a reading has repeated enough times', () => {
@@ -138,5 +138,79 @@ describe('createLatch', () => {
     }
 
     expect(flips).toEqual([])
+  })
+})
+
+describe('createSettler', () => {
+  it('holds a new value back until it has stood still long enough', () => {
+    const settler = createSettler<string>()
+
+    expect(settler.push('C', 0, 0.12)).toBe(null)
+    expect(settler.push('C', 0.05, 0.12)).toBe(null)
+    expect(settler.push('C', 0.2, 0.12)).toBe('C')
+  })
+
+  /**
+   * The whole reason this exists. Measured on a real camera: going from C to A minor, the
+   * degree lands up to 300 ms before the quality does, so `1/1 → 6/1 → 6m/1` — and the
+   * middle one, A *major*, gets struck. It is a chord nobody asked for.
+   */
+  it('never commits a chord that was only passed through', () => {
+    const settler = createSettler<string>()
+    const settle = 0.12
+
+    settler.push('1/1', 0, settle)
+    expect(settler.push('1/1', 0.3, settle)).toBe('1/1')
+
+    // The right hand has arrived at the sixth; the left thumb is still on its way.
+    expect(settler.push('6/1', 0.5, settle)).toBe('1/1')
+    expect(settler.push('6/1', 0.55, settle)).toBe('1/1')
+
+    // The thumb lands. The chord it passed through was never committed.
+    expect(settler.push('6m/1', 0.58, settle)).toBe('1/1')
+    expect(settler.push('6m/1', 0.75, settle)).toBe('6m/1')
+  })
+
+  // A hand that keeps moving must not lock the instrument out for ever: each new reading
+  // restarts the wait, so the only thing that commits is standing still.
+  it('restarts the wait every time the value changes', () => {
+    const settler = createSettler<string>()
+
+    settler.push('a', 0, 0.1)
+    settler.push('b', 0.09, 0.1)
+    settler.push('c', 0.18, 0.1)
+    expect(settler.value).toBe(null)
+
+    expect(settler.push('c', 0.35, 0.1)).toBe('c')
+  })
+
+  // Zero is the off switch — it has to be exactly today's behaviour, so the slider can be
+  // used to A/B the fix against no fix at all.
+  it('commits immediately when the wait is zero', () => {
+    const settler = createSettler<string>()
+
+    expect(settler.push('C', 0, 0)).toBe('C')
+    expect(settler.push('F', 0.001, 0)).toBe('F')
+  })
+
+  // Held shapes are the normal case for this instrument — a chord is a hand kept still —
+  // so the settled value has to keep being reported without waiting again.
+  it('keeps reporting a value that has already settled', () => {
+    const settler = createSettler<string>()
+
+    settler.push('C', 0, 0.1)
+    expect(settler.push('C', 0.2, 0.1)).toBe('C')
+    expect(settler.push('C', 5, 0.1)).toBe('C')
+    expect(settler.push('C', 30, 0.1)).toBe('C')
+  })
+
+  it('forgets everything on reset', () => {
+    const settler = createSettler<string>()
+    settler.push('C', 0, 0.1)
+    settler.push('C', 0.2, 0.1)
+    expect(settler.value).toBe('C')
+
+    settler.reset()
+    expect(settler.value).toBe(null)
   })
 })

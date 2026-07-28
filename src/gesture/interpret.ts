@@ -38,25 +38,70 @@ export const DEGREE_BY_MASK: ReadonlyMap<FingerMask, ScaleDegree> = new Map([
   [THUMB | INDEX | PINKY, 7],
 ] as [FingerMask, ScaleDegree][])
 
-/**
- * Left hand: how thickly the chord is voiced.
- *
- * Keyed on the fingers alone — the thumb is stripped before the lookup, because on this
- * hand the thumb says something else entirely. Out is major, tucked is minor. So each of
- * these has two spellings, and both mean the same density.
- */
-export const DENSITY_BY_MASK: ReadonlyMap<FingerMask, Density> = new Map([
-  [INDEX, 1],
-  [INDEX | MIDDLE, 2],
-  [INDEX | MIDDLE | RING, 3],
-] as [FingerMask, Density][])
-
 /** A closed left hand is the mute — thumb wherever it likes, so a thumbs-up mutes too. */
 export const FIST: FingerMask = 0
 
 /** What the left hand is showing once its thumb has been set aside for the chord quality. */
 export function shapedFingers(mask: FingerMask): FingerMask {
   return mask & ~THUMB
+}
+
+/** How many of the four hinged fingers are up. The thumb is not among them — on this hand
+ *  it chooses major or minor, and `shapedFingers` has already taken it out. */
+function fingerCount(fingers: FingerMask): number {
+  let count = 0
+  for (const bit of [INDEX, MIDDLE, RING, PINKY]) {
+    if ((fingers & bit) !== 0) count++
+  }
+  return count
+}
+
+/**
+ * Left hand: how thickly the chord is voiced. One finger a triad, two adds the octave,
+ * three or more the seventh. Null for a fist, which is the mute and has no voicing of its
+ * own — holding the last one means unmuting returns to the chord you left.
+ *
+ * Counted rather than matched against a table of exact shapes, which is what this was. That
+ * table held three: index, index+middle, index+middle+ring. Every other shape — four
+ * fingers, an open palm, a коза, or simply a pinky drifting up while three were held — fell
+ * off the end of it, and a shape that is not in the table yields null, which *holds* the
+ * voicing and the gate where they are. So the hand went quiet and stayed quiet, and the only
+ * way back was to stumble onto one of the three shapes again. Same measurement as the chord
+ * hand, same thresholds, and it felt far worse to play, because it forgave three shapes
+ * where the other forgave seven.
+ *
+ * The chord hand has to match on identity: коза and two fingers are both two fingers and
+ * have to mean different degrees. This hand has three voicings and no such problem, so
+ * counting costs nothing and every shape now means something.
+ */
+export function densityFor(fingers: FingerMask): Density | null {
+  const count = fingerCount(fingers)
+  if (count === 0) return null
+  return count === 1 ? 1 : count === 2 ? 2 : 3
+}
+
+/**
+ * Why one hand was or was not recognised.
+ *
+ * Kept per hand rather than once. It used to be recorded only for the chord hand, on the
+ * reasoning that that was the interesting one — but a shaping hand that is not recognised
+ * mutes the instrument or freezes its voicing, and did so with nothing on screen to say
+ * why. A silent rejection is right for playing and useless for diagnosing, which is the
+ * whole reason these numbers are surfaced at all.
+ */
+export type RoleDebug = {
+  /** Whether this hand is being read by a calibration or by the rules. */
+  calibrated: boolean
+  /** How far the hand sat from the nearest gesture, how far out it would still have been
+   *  accepted, and how much better that match was than the next. Only meaningful when
+   *  calibrated — the rules never say "not sure". */
+  distance: number
+  margin: number
+  radius: number
+}
+
+function emptyRole(): RoleDebug {
+  return { calibrated: false, distance: 0, margin: 0, radius: 0 }
 }
 
 /** Everything the HUD and tuning panel need to show why the instrument is doing what it
@@ -75,15 +120,11 @@ export type InterpreterDebug = {
    *  Shown in the readout so it can be set from what the camera actually sees rather than
    *  guessed at. */
   rightReach: Record<string, number>
-  /** Whether the chord hand is being read by a calibration or by the rules. */
-  calibrated: boolean
-  /** The numbers a calibrated decision was made from: how far the hand sat from the nearest
-   *  gesture, how far out it would still have been accepted, and how much better that match
-   *  was than the next. Rejection is silent by design — the chord holds — so these are the
-   *  only way to tell "cannot see my hand" from "cannot decide" from "too far from anything". */
-  margin: number
-  distance: number
-  radius: number
+  /** Why each hand was or was not recognised. Rejection is silent by design — the chord
+   *  holds — so these are the only way to tell "cannot see my hand" from "cannot decide"
+   *  from "too far from anything", for either hand. */
+  right: RoleDebug
+  left: RoleDebug
 }
 
 export type Interpreter = {
@@ -138,10 +179,8 @@ export function createInterpreter(config: Config): Interpreter {
     leftThumb: 0,
     rightLostFrames: 0,
     rightReach: {},
-    calibrated: false,
-    margin: 0,
-    distance: 0,
-    radius: 0,
+    right: emptyRole(),
+    left: emptyRole(),
   }
 
   /**
@@ -156,11 +195,10 @@ export function createInterpreter(config: Config): Interpreter {
     if (model === null) return fingerMask(shape, config)
 
     const verdict = classify(handFeatures(shape), model, config.gesture)
-    if (role === 'right') {
-      debug.margin = verdict.margin
-      debug.distance = verdict.distance
-      debug.radius = verdict.radius
-    }
+    const seen = debug[role]
+    seen.margin = verdict.margin
+    seen.distance = verdict.distance
+    seen.radius = verdict.radius
     return verdict.mask
   }
 
@@ -169,7 +207,8 @@ export function createInterpreter(config: Config): Interpreter {
 
     setCalibration(next) {
       calibration = next
-      debug.calibrated = next.right !== null
+      debug.right.calibrated = next.right !== null
+      debug.left.calibrated = next.left !== null
     },
 
     update(frame, fresh = true) {
@@ -210,12 +249,15 @@ export function createInterpreter(config: Config): Interpreter {
         major.push(debug.leftThumb, config.quality.minorBelowDeg, config.quality.majorAboveDeg)
 
         const fingers = mask === null ? null : shapedFingers(mask)
-        const voicing = fingers === null ? null : (DENSITY_BY_MASK.get(fingers) ?? null)
-        density.push(voicing, stabilityFrames)
 
-        // A fist mutes and any recognised voicing unmutes. Anything else holds, so the
-        // shapes passed through on the way in or out of a fist change nothing.
-        gate.push(fingers === FIST ? false : voicing !== null ? true : null, stabilityFrames)
+        // Null while muted, so the voicing is held rather than overwritten — unmuting comes
+        // back to the chord you left rather than to a default.
+        density.push(fingers === null ? null : densityFor(fingers), stabilityFrames)
+
+        // A fist mutes and any open hand unmutes. Only an unreadable hand holds, which under
+        // the rules never happens and under a calibration means the classifier said "not
+        // sure" — the one case where guessing would be worse than staying put.
+        gate.push(fingers === null ? null : fingers !== FIST, stabilityFrames)
 
         tilt.push(tiltAmount(frame.left.landmarks, config), config.smoothing.alpha)
         volume.push(volumeLevel(frame.left.landmarks, config), config.smoothing.alpha)

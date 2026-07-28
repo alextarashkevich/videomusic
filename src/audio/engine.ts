@@ -1,11 +1,12 @@
 import * as Tone from 'tone'
 import type { Config } from '../config'
-import type { PerformanceState } from '../types'
-import { loadPiano } from './pianoSampler'
+import { createSettler } from '../gesture/stabilizer'
+import type { Density, PerformanceState } from '../types'
 import { DEFAULT_PRESET, findPreset, type Preset } from './presets'
+import { loadSamples, SUSTAIN_SECONDS } from './sampleSets'
 import {
   chordPitches,
-  leadVoices,
+  leadVoicing,
   midiToFrequency,
   midiToNote,
   registerFor,
@@ -22,6 +23,9 @@ export type AudioEngine = {
   readonly preset: string
   /** Output level, 0..1, for the visuals to react to. */
   getLevel: () => number
+  /** The notes actually sounding, lowest first — not the chord in root position, but where
+   *  the voices ended up. The only honest answer to "what am I hearing?". */
+  getNotes: () => string[]
   dispose: () => void
 }
 
@@ -36,9 +40,9 @@ const HELD = { attack: 0.01, decay: 0, sustain: 1, release: 0.1 } as const
  *
  * Two ways of making sound share one output chain. Held voices are the original design and
  * still the default — four oscillators attacked at startup and never retriggered, where the
- * gate is a fade rather than a cut because there is nothing to cut. The sampled piano is
- * the other, and it exists because a piano is a hammer and a decay: no amount of gain-riding
- * a held tone imitates one.
+ * gate is a fade rather than a cut because there is nothing to cut. Sampled instruments are
+ * the other, and they exist because no amount of filtering a sawtooth stack makes it a
+ * string section; a recording of one simply is one.
  *
  * Both feed the same filter, reverb, volume, gate and limiter, so switching between them
  * changes the instrument and nothing else.
@@ -87,9 +91,20 @@ export async function createAudioEngine(config: Config): Promise<AudioEngine> {
 
   let preset: Preset = findPreset(DEFAULT_PRESET)
   let lastChord = ''
+  /** Holds a chord back until both hands have finished arriving — see `createSettler`, and
+   *  `config.smoothing.settleSeconds` for what it costs. */
+  const settling = createSettler<string>()
   let pitches: number[] | null = null
-  let piano: Tone.Sampler | null = null
+  /** Which note of the chord each voice is holding — see `leadVoicing`. */
+  let sources: number[] = [0, 1, 2, 3]
+  /** The density the current voicing was built for, so `getNotes` can say which voices of it
+   *  are actually sounding. */
+  let lastDensity: Density = 3
+  let sampler: Tone.Sampler | null = null
   let sounding: string[] = []
+  /** When the sampled chord currently ringing was struck. A recording runs out; this is what
+   *  the refresh in `update` measures against so it never does so audibly. */
+  let struckAt = 0
 
   function applyPreset(next: Preset): void {
     const wasStruck = preset.retrigger === true
@@ -116,23 +131,32 @@ export async function createAudioEngine(config: Config): Promise<AudioEngine> {
     }
 
     if (next.sampler === undefined) {
+      sampler = null
       oscillators.gain.value = 1
       samples.gain.value = 0
 
-      // A struck preset leaves its voices decayed to silence, so coming back to a held one
-      // has to attack them again or the instrument is simply mute.
+      // A retriggering preset leaves its voices decayed to silence, so coming back to a held
+      // one has to attack them again or the instrument is simply mute.
       if (wasStruck && next.retrigger !== true) {
         for (const [index, voice] of voices.entries()) {
           voice.synth.triggerAttack(midiToFrequency(pitches?.[index] ?? 60))
         }
       }
     } else {
+      sampler = null
+      sounding = []
       oscillators.gain.value = 0
       samples.gain.value = 1
-      // Two megabytes of it, so it waits until somebody actually asks for a piano.
-      loadPiano(samples)
+
+      // A megabyte or two each, so they wait until somebody actually asks for that
+      // instrument. Cached per set, so switching away and back does not fetch again.
+      const wanted = next.sampler
+      loadSamples(wanted, samples)
         .then((loaded) => {
-          piano = loaded
+          // Guard against a slow load landing after the player has moved on: without this,
+          // choosing strings and then organ leaves the strings sampler wired up as the one
+          // that gets struck.
+          if (preset.sampler === wanted) sampler = loaded
         })
         .catch(() => {
           // Nothing to recover to but the oscillators; better a different sound than none.
@@ -153,23 +177,24 @@ export async function createAudioEngine(config: Config): Promise<AudioEngine> {
   /**
    * Strikes the chord, for presets that are struck rather than held.
    *
-   * Returns false when it could not — the piano is two megabytes and the first chord after
-   * choosing it can easily arrive before the samples have. The caller must then leave the
-   * chord uncommitted, so it is struck as soon as the samples land rather than staying
+   * Returns false when it could not — a sample set is a megabyte or two and the first chord
+   * after choosing it can easily arrive before the files have. The caller must then leave
+   * the chord uncommitted, so it is struck as soon as the samples land rather than staying
    * silent until the player happens to change gesture.
    */
   function strike(next: number[], gains: number[], at: number): boolean {
     if (preset.sampler !== undefined) {
-      if (piano === null) return false
-      if (sounding.length > 0) piano.triggerRelease(sounding, at)
+      if (sampler === null) return false
+      if (sounding.length > 0) sampler.triggerRelease(sounding, at)
 
       sounding = []
       for (const [index, pitch] of next.entries()) {
         if ((gains[index] ?? 0) <= 0) continue
         const note = midiToNote(pitch)
         sounding.push(note)
-        piano.triggerAttack(note, at, gains[index])
+        sampler.triggerAttack(note, at, gains[index])
       }
+      struckAt = at
       return true
     }
 
@@ -197,7 +222,9 @@ export async function createAudioEngine(config: Config): Promise<AudioEngine> {
       const now = Tone.now()
       const { rampSeconds, gateFadeSeconds } = config.smoothing
       const glideSeconds = preset.glideSeconds ?? config.smoothing.glideSeconds
-      const gains = voiceGains(state.density)
+      // Which voice holds which note of the chord decides which one a thin density silences,
+      // so the gains cannot be worked out until the chord has been voiced.
+      const gains = voiceGains(state.density, sources)
 
       if (state.degree !== null) {
         // Only re-voice when the chord actually changes — the assignment search would
@@ -211,16 +238,35 @@ export async function createAudioEngine(config: Config): Promise<AudioEngine> {
           config.music.scale.join(),
         ].join('|')
 
-        if (chord !== lastChord) {
+        // What the hands are showing is not yet what they mean. Both hands have to be
+        // rearranged to change chord and they do not land together, so the reading passes
+        // through chords nobody asked for — and a struck preset would strike each one.
+        // Waiting for the reading to stand still is what makes the in-between silent; a
+        // chord only passed through is never returned here. Costs `settleSeconds` on every
+        // change, which is why it is a slider.
+        // Asking whether the settled chord *is the one being shown* rather than merely
+        // whether it differs from what is playing: the two come apart whenever `lastChord`
+        // was cleared without the reading changing — a failed strike waiting on samples, or
+        // a preset switch — and there the second question would wave a half-formed chord
+        // straight through.
+        const settled = settling.push(chord, now, config.smoothing.settleSeconds)
+
+        if (settled === chord && chord !== lastChord) {
           const target = chordPitches(state.degree, state.quality, state.density, config)
-          pitches = leadVoices(target, pitches, registerFor(config))
+          const voicing = leadVoicing(target, pitches, registerFor(config))
+          pitches = voicing.pitches
+          sources = voicing.sources
+          lastDensity = state.density
+          // Re-read now that the assignment is known, or this chord would be shaped by the
+          // last one's.
+          gains.splice(0, gains.length, ...voiceGains(state.density, sources))
 
           // Struck presets re-attack, which is also why changing the left hand re-strikes:
           // density is part of the chord, so reaching for a seventh plays the chord again.
           // Held presets slide, which is what makes a progression feel continuous.
           if (preset.retrigger === true) {
             // Left uncommitted if the strike could not happen — a muted chord has nothing
-            // to strike, and a piano that has not finished loading needs asking again.
+            // to strike, and samples that have not finished loading need asking again.
             if (state.gate && strike(pitches, gains, now)) lastChord = chord
           } else {
             lastChord = chord
@@ -233,6 +279,30 @@ export async function createAudioEngine(config: Config): Promise<AudioEngine> {
             }
           }
         }
+      }
+
+      /**
+       * Play the same chord again before the recording runs out.
+       *
+       * A recorded note is finite — around ten to twelve seconds here, measured rather than
+       * assumed, and one of them is cut off mid-note rather than fading. On an instrument
+       * played by *holding* a shape, that means the sound dying while the player is still
+       * holding it and has changed nothing: the one failure that looks exactly like a bug.
+       *
+       * The re-strike releases the ringing notes over a 1.4-second tail while the new ones
+       * come in under it, so the seam is a crossfade. On the two organs there is no attack
+       * transient to hear at all; on the strings it reads as a bow change, which is what a
+       * real player holding a long note does anyway.
+       */
+      if (
+        preset.sampler !== undefined &&
+        state.gate &&
+        state.degree !== null &&
+        pitches !== null &&
+        sounding.length > 0 &&
+        now - struckAt > SUSTAIN_SECONDS[preset.sampler]
+      ) {
+        strike(pitches, gains, now)
       }
 
       // A sampled preset carries its own note levels from the strike, so riding these as
@@ -256,13 +326,22 @@ export async function createAudioEngine(config: Config): Promise<AudioEngine> {
       return typeof value === 'number' ? value : 0
     },
 
+    getNotes() {
+      if (pitches === null) return []
+      const audible = voiceGains(lastDensity, sources)
+      return pitches
+        .filter((_, index) => (audible[index] ?? 0) > 0)
+        .sort((a, b) => a - b)
+        .map(midiToNote)
+    },
+
     dispose() {
       for (const { synth, gain, panner } of voices) {
         synth.dispose()
         gain.dispose()
         panner.dispose()
       }
-      piano?.dispose()
+      sampler?.dispose()
       oscillators.dispose()
       samples.dispose()
       tone.dispose()

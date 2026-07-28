@@ -8,10 +8,13 @@ import { defineConfig } from 'vitest/config'
 export default defineConfig({
   base: '/videomusic/',
   build: {
-    // Three.js is most of the bundle. Beside the ~11 MB of MediaPipe wasm and the 7.8 MB
-    // model this page also loads, ~240 kB gzipped is a rounding error, so the default
+    // Tone.js is most of what is left. Beside the ~11 MB of MediaPipe wasm and the 7.8 MB
+    // model this page also loads, ~120 kB gzipped is a rounding error, so the default
     // 500 kB warning is noise here rather than a signal.
-    chunkSizeWarningLimit: 1200,
+    //
+    // It used to be nearly four times this, almost all Three.js, for one fullscreen shader.
+    // Replacing that with four canvas gradients took the bundle from 941 kB to 433 kB.
+    chunkSizeWarningLimit: 800,
   },
   server: {
     host: '127.0.0.1',

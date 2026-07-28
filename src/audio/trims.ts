@@ -9,15 +9,15 @@
  * Run it by loading the app with `?trims=1`; it prints a block ready to paste back into
  * `presets.ts`. It has to run in a browser, because there is no Web Audio outside one.
  *
- * **Peak over the first half-second**, not RMS over the whole thing. RMS is the right
- * measure for a held tone and the wrong one for a struck one: a piano chord spends most of
- * any window decaying, so matching average energy would make it arrive far too loud. Peak
- * early on is what the two have in common. It is still a proxy — loudness is a perceptual
- * quantity and this is a physical one — so treat the numbers as a starting point that is
- * right to within a hair rather than as the final word over your own ears.
+ * **Peak over the first half-second**, not RMS over the whole thing. The two kinds of
+ * preset reach their level differently — an oscillator is already there when the window
+ * opens, a recording has an attack to get through — and peak early on is what they have in
+ * common. It is still a proxy: loudness is a perceptual quantity and this is a physical one,
+ * so treat the numbers as a starting point that is right to within a hair rather than as the
+ * final word over your own ears.
  */
 import * as Tone from 'tone'
-import { sampleUrls } from './pianoSampler'
+import { sampleUrls } from './sampleSets'
 import { PRESETS, type Preset } from './presets'
 import { chordPitches, midiToFrequency, midiToNote, voiceGains, VOICE_COUNT } from './voicing'
 import type { Config } from '../config'
@@ -52,10 +52,10 @@ async function render(preset: Preset, config: Config): Promise<number> {
     // still be waiting for it when the render finished — which is exactly what "buffer is
     // either not set or not loaded" means. Buffers are not tied to the context that decoded
     // them, so passing them across is fine.
-    const urls = sampleUrls()
+    const urls = sampleUrls(preset.sampler)
     const buffers = new Tone.ToneAudioBuffers({
       urls,
-      baseUrl: `${import.meta.env.BASE_URL}samples/piano/`,
+      baseUrl: `${import.meta.env.BASE_URL}samples/${preset.sampler}/`,
     })
     await Tone.loaded()
 

@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { defaultConfig, type Config } from '../config'
 import type { HandFrame, Landmarks, PerformanceState } from '../types'
-import { createInterpreter, type Interpreter } from './interpret'
+import { buildModel } from './classifier'
+import { handFeatures } from './features'
+import { createInterpreter, FIST, type Interpreter } from './interpret'
 import { GESTURES, makeHand, type FingerStates, type HandOptions } from './testHands'
 
 let config: Config
@@ -190,6 +192,49 @@ describe('left hand shapes the sound', () => {
     }
   })
 
+  /**
+   * The complaint this fixes: the shaping hand felt far worse to play than the chord hand.
+   *
+   * It was not measured worse — it was mapped worse. Density came from a table of three
+   * exact shapes, and everything else fell off the end of it into "hold what you had": four
+   * fingers, an open palm, a коза, or just a pinky drifting up while three were held. The
+   * hand went quiet and stayed quiet with nothing to say why. Counting fingers instead means
+   * no shape can freeze it.
+   */
+  it('gives every open shape a voicing, not just the three it used to know', () => {
+    for (const gesture of ['four', 'open', 'koza', 'kozaThumb'] as const) {
+      interpreter.reset()
+      const state = hold({ right: hand(GESTURES.one), left: hand(GESTURES[gesture]) })
+
+      expect(state.gate, gesture).toBe(true)
+      expect(state.density, gesture).toBeGreaterThan(0)
+    }
+  })
+
+  // A коза is two fingers up, so it voices like two fingers. The chord hand has to tell the
+  // two apart because they mean different degrees; this hand has three voicings and no such
+  // problem, which is exactly why it can afford to count.
+  it('counts fingers rather than matching shapes, so коза voices as two', () => {
+    expect(hold({ right: hand(GESTURES.one), left: hand(GESTURES.koza) }).density).toBe(2)
+  })
+
+  // Four fingers is past the top of the range, and saturating is the only sensible thing to
+  // do with it — the alternative is a fourth voicing nobody asked for.
+  it('saturates at the seventh rather than running off the end', () => {
+    expect(hold({ right: hand(GESTURES.one), left: hand(GESTURES.four) }).density).toBe(3)
+    expect(hold({ right: hand(GESTURES.one), left: hand(GESTURES.open) }).density).toBe(3)
+  })
+
+  // The thumb chooses major or minor on this hand, so it must not also change the voicing.
+  it('ignores the thumb when counting', () => {
+    interpreter.reset()
+    const tucked = hold({ right: hand(GESTURES.one), left: hand(GESTURES.koza) }).density
+    interpreter.reset()
+    const out = hold({ right: hand(GESTURES.one), left: hand(GESTURES.kozaThumb) }).density
+
+    expect(out).toBe(tucked)
+  })
+
   it('mutes on a fist', () => {
     expect(hold({ right: hand(GESTURES.one), left: openLeft() }).gate).toBe(true)
     expect(hold({ right: hand(GESTURES.one), left: hand(GESTURES.fist) }).gate).toBe(false)
@@ -200,10 +245,27 @@ describe('left hand shapes the sound', () => {
     expect(hold({ right: hand(GESTURES.one), left: openLeft() }).gate).toBe(true)
   })
 
-  it('keeps the fist muted through unrecognised shapes', () => {
-    hold({ right: hand(GESTURES.one), left: hand(GESTURES.fist) })
-    const state = hold({ right: hand(GESTURES.one), left: hand(GESTURES.koza) }, 30)
-    expect(state.gate).toBe(false)
+  /**
+   * The rules now name a voicing for every shape, so under them nothing is ever
+   * unrecognised — which is the point of Phase 1. A calibration still can be unsure, and
+   * that is the case worth protecting: "not sure" must hold what was playing rather than
+   * guess, or the mute becomes something that can be knocked off by a bad frame.
+   *
+   * The model here holds a single gesture, so its radius collapses to the floor and
+   * anything that is not a fist is comfortably outside it. That makes the rejection a fact
+   * about the geometry rather than a threshold that could drift.
+   */
+  it('holds the mute when a calibrated hand cannot be read', () => {
+    const features = handFeatures(makeHand(GESTURES.fist))
+    expect(features).not.toBeNull()
+
+    interpreter.setCalibration({
+      right: null,
+      left: buildModel([{ mask: FIST, features: features! }]),
+    })
+
+    expect(hold({ right: hand(GESTURES.one), left: hand(GESTURES.fist) }).gate).toBe(false)
+    expect(hold({ right: hand(GESTURES.one), left: hand(GESTURES.koza) }, 30).gate).toBe(false)
   })
 
   it('raises volume as the hand rises', () => {

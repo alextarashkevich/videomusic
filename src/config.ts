@@ -80,6 +80,20 @@ export type Config = {
     glideSeconds: number
     /** Seconds to fade in and out when the gate opens or closes. */
     gateFadeSeconds: number
+    /**
+     * Seconds the whole chord must stand still before it is played.
+     *
+     * Changing chord rearranges both hands and they do not land together, so for a moment
+     * the instrument is shown a chord nobody meant and plays it — C to A minor reads A
+     * major on the way past. This is how long it waits to see whether the hands are
+     * finished. Zero is the old behaviour exactly, which is what makes the slider an A/B
+     * rather than a leap of faith.
+     *
+     * It is paid on every chord, so it trades directly against how responsive the
+     * instrument feels; it is set in seconds rather than frames because the gap it waits
+     * out is a property of hands, not of the camera's frame rate.
+     */
+    settleSeconds: number
   }
   music: {
     /** Tonic of the scale the seven degrees are built on. */
@@ -156,6 +170,13 @@ export const defaultConfig: Config = {
     rampSeconds: 0.05,
     glideSeconds: 0.05,
     gateFadeSeconds: 0.18,
+    // Measured, not guessed. Over 61 chord changes on Alex's camera the median span from
+    // the first hand landing to the last was 17 ms and half of them were zero — but the
+    // tail ran to 300 ms and 51% of changes struck a chord that was never asked for. This
+    // covers about two thirds of those — 21 of the 31 — and the rest of the tail runs out
+    // to 400 ms, which costs more in feel than it buys back. Whether that last third is
+    // worth the latency is a question for an ear, which is why it is a slider.
+    settleSeconds: 0.12,
   },
   music: {
     root: 'C3',

@@ -5,6 +5,15 @@ import { CONTROLS, ROOT_OPTIONS, SCALE_OPTIONS, type Control } from './controls'
 export type TuningPanel = {
   toggle: () => void
   readonly open: boolean
+  /**
+   * Where everything the instrument can *do* lives, as opposed to what it can be set to.
+   *
+   * There used to be nine buttons along the bottom of the screen. Nine is a menu, and a menu
+   * is what you read instead of playing — so all but one moved in here, behind a single
+   * Settings button. The panel owns the slot rather than the caller creating one, so the
+   * actions always land above the settings and inside the same scroll.
+   */
+  readonly actions: HTMLElement
   /** Fires whenever the panel opens or closes, so whatever shares the right-hand side
    *  of the screen can get out of the way. */
   onToggle: (listener: (open: boolean) => void) => void
@@ -29,7 +38,7 @@ export function createTuningPanel(config: Config): TuningPanel {
 
   const header = document.createElement('div')
   header.className = 'tuning-header'
-  header.innerHTML = '<strong>Tuning</strong><span>press T</span>'
+  header.innerHTML = '<strong>Settings</strong><span>press T</span>'
   panel.append(header)
 
   const body = document.createElement('div')
@@ -37,6 +46,10 @@ export function createTuningPanel(config: Config): TuningPanel {
   panel.append(body)
 
   const refreshers: (() => void)[] = []
+
+  const actions = document.createElement('div')
+  actions.className = 'tuning-actions'
+  body.append(actions)
 
   body.append(makeHeading('Sound'))
   refreshers.push(addPresetSelect(body, config))
@@ -113,6 +126,7 @@ export function createTuningPanel(config: Config): TuningPanel {
     get open() {
       return !panel.hidden
     },
+    actions,
     toggle: () => setOpen(panel.hidden),
     onToggle: (listener) => listeners.push(listener),
     refresh: () => {

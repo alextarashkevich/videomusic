@@ -1,5 +1,5 @@
 /**
- * The three pieces of state that stand between raw per-frame readings and something
+ * The four pieces of state that stand between raw per-frame readings and something
  * worth playing. Each is deliberately tiny and independent so it can be reasoned about
  * and tested on its own.
  *
@@ -91,6 +91,66 @@ export function createSmoother(initial = 0): Smoother {
     reset() {
       current = initial
       seeded = false
+    },
+  }
+}
+
+export type Settler<T> = {
+  /**
+   * Feed what is being shown right now, against a monotonic clock in seconds.
+   *
+   * Returns the value that has stood still for `settleSeconds` — which is the previous
+   * one while a new reading is still settling, and null until anything has settled at
+   * all. `settleSeconds` of zero commits on sight.
+   */
+  push: (value: T, nowSeconds: number, settleSeconds: number) => T | null
+  readonly value: T | null
+  reset: () => void
+}
+
+/**
+ * Commits a value only once it has stopped changing for a while.
+ *
+ * The time-based twin of `createStabilizer`, and it exists because the thing it has to
+ * wait out is not measured in frames. Changing chord means rearranging both hands, and
+ * they do not finish together: measured on a real camera, the degree can land up to
+ * 300 ms before the quality does. For that gap the instrument is being shown a chord
+ * nobody meant — going from C to A minor it reads A *major* on the way past — and a
+ * struck preset strikes it. Half of all chord changes played one.
+ *
+ * Frames cannot express this. The camera runs at about 30 Hz and the gap is anywhere
+ * from one frame to ten, so a frame count tight enough to catch the long ones costs a
+ * third of a second on every chord, including the half that already arrive clean.
+ * Seconds are the honest unit, and a single number in seconds is something a player can
+ * be handed a slider for and set by ear.
+ *
+ * Every change restarts the wait, so a hand still moving commits nothing — and, equally
+ * important, a hand that has stopped commits regardless of how it got there.
+ */
+export function createSettler<T>(): Settler<T> {
+  let committed: T | null = null
+  let candidate: T | null = null
+  let since = 0
+
+  return {
+    push(value, nowSeconds, settleSeconds) {
+      if (value !== candidate) {
+        candidate = value
+        since = nowSeconds
+      }
+
+      if (nowSeconds - since >= settleSeconds) committed = value
+      return committed
+    },
+
+    get value() {
+      return committed
+    },
+
+    reset() {
+      committed = null
+      candidate = null
+      since = 0
     },
   }
 }

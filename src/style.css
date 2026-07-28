@@ -283,10 +283,10 @@ body {
 
 .song-chords li {
   display: grid;
-  grid-template-columns: 34px 58px 1fr;
-  align-items: baseline;
-  gap: 8px;
-  padding: 5px 8px;
+  grid-template-columns: 28px 46px auto 1fr;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
   border-radius: 7px;
   color: var(--dim);
 }
@@ -541,4 +541,560 @@ body {
 .tuning-reset:hover {
   color: var(--fg);
   border-color: rgb(255 255 255 / 28%);
+}
+
+/* --- Hand diagrams ------------------------------------------------------ */
+/* One drawing routine feeds the chord display, the tutorial and the song list, so the
+   colours live here once rather than in each of them. */
+
+/* Fingers are capsules — a stroked line with round caps — so they take a stroke colour,
+   while the palm is a filled rectangle. */
+.hand-icon .palm {
+  fill: rgb(255 255 255 / 14%);
+}
+
+.hand-icon .finger {
+  stroke: rgb(255 255 255 / 14%);
+}
+
+.hand-icon .finger.is-up {
+  stroke: var(--accent);
+}
+
+/* Lies on top of the palm, so it needs to be a shade lighter than it or minor and a hand
+   with no thumb at all look exactly the same. */
+.hand-icon .finger.is-tucked {
+  stroke: rgb(255 255 255 / 32%);
+}
+
+.hand-icon.is-target .finger.is-up {
+  filter: drop-shadow(0 0 5px rgb(110 231 255 / 50%));
+}
+
+/* --- What is sounding --------------------------------------------------- */
+
+#chord-display {
+  position: absolute;
+  bottom: 18px;
+  left: 50%;
+  translate: -50% 0;
+  display: grid;
+  grid-template-columns: auto auto;
+  grid-template-areas:
+    'name hands'
+    'numeral hands'
+    'notes hands';
+  gap: 0 18px;
+  align-items: center;
+  padding: 12px 20px;
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 16px;
+  background: rgb(7 7 11 / 62%);
+  backdrop-filter: blur(12px);
+  pointer-events: none;
+  transition: opacity 240ms ease;
+}
+
+#chord-display[hidden] {
+  display: none;
+}
+
+#chord-display.is-silent {
+  opacity: 0.45;
+}
+
+.chord-name {
+  grid-area: name;
+  font-size: 34px;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+}
+
+/* Deliberately not uppercased. Musicians write minor degrees in lower case, and that is the
+   difference between vi and VI — folding the case away throws the information out. */
+.chord-numeral {
+  grid-area: numeral;
+  color: var(--dim);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+}
+
+/* Monospaced and tabular so the notes do not shuffle sideways as the chord changes. */
+.chord-notes {
+  grid-area: notes;
+  color: #6a6a7c;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  min-height: 16px;
+}
+
+.chord-hands {
+  grid-area: hands;
+  display: flex;
+  gap: 14px;
+}
+
+.chord-hand {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+}
+
+.chord-hand span {
+  color: var(--dim);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* --- Tutorial ----------------------------------------------------------- */
+/* The middle of the screen, in large white type. It sat in the corner in small grey text
+   next to a chord chart, a readout and nine buttons, and a first-time player had no idea
+   where to look — the one thing explaining itself was the smallest text on screen. */
+
+#tutorial {
+  position: absolute;
+  inset: 0;
+  z-index: 18;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  /* Darkened toward the edges but clear in the middle, so you can still see your own hands
+     behind the instructions — which is the whole point of the exercise. */
+  background: radial-gradient(ellipse at 50% 50%, rgb(7 7 11 / 35%), rgb(7 7 11 / 88%) 78%);
+}
+
+#tutorial[hidden] {
+  display: none;
+}
+
+.tutorial-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  max-width: 660px;
+  text-align: center;
+  pointer-events: auto;
+}
+
+/* One dot per step. A number out of fifteen reads as a chore; dots read as nearly done. */
+.tutorial-dots {
+  display: flex;
+  gap: 6px;
+}
+
+.tutorial-dots i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 18%);
+}
+
+.tutorial-dots i.is-done {
+  background: rgb(255 255 255 / 45%);
+}
+
+.tutorial-dots i.is-here {
+  background: var(--accent);
+  box-shadow: 0 0 10px rgb(110 231 255 / 70%);
+}
+
+.tutorial-title {
+  color: #fff;
+  font-size: clamp(30px, 5.4vw, 54px);
+  font-weight: 600;
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+  text-shadow: 0 2px 24px rgb(0 0 0 / 70%);
+}
+
+.tutorial-detail {
+  max-width: 30ch;
+  color: rgb(255 255 255 / 72%);
+  font-size: clamp(15px, 1.7vw, 20px);
+  line-height: 1.4;
+  text-wrap: balance;
+  text-shadow: 0 1px 16px rgb(0 0 0 / 70%);
+}
+
+.tutorial-detail[hidden] {
+  display: none;
+}
+
+.tutorial-hands {
+  display: flex;
+  gap: 52px;
+  align-items: flex-end;
+}
+
+.tutorial-hand {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+}
+
+/* The hand the step is not about. Dimmed rather than hidden — hiding it is what made people
+   take it out of shot, and with one hand gone the instrument is silent. */
+.tutorial-hand.is-resting {
+  opacity: 0.42;
+}
+
+.tutorial-hand span {
+  color: rgb(255 255 255 / 70%);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.tutorial-hand em {
+  color: rgb(255 255 255 / 45%);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.tutorial-hand:not(.is-resting) span {
+  color: var(--accent);
+}
+
+/* Fills over the two seconds the shape has to be held, so the wait reads as progress rather
+   than as nothing happening. Driven by --hold, set from the hold timer. */
+.tutorial-status {
+  position: relative;
+  min-height: 34px;
+  padding: 6px 0 0;
+  color: var(--accent);
+  font-size: 15px;
+}
+
+.tutorial-status::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0;
+  left: 50%;
+  width: 220px;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+  transform: translateX(-50%) scaleX(var(--hold, 0));
+  transition: transform 90ms linear;
+}
+
+.tutorial-skip {
+  padding: 8px 18px;
+  border: 1px solid rgb(255 255 255 / 18%);
+  border-radius: 999px;
+  background: none;
+  color: rgb(255 255 255 / 55%);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.tutorial-skip:hover {
+  color: #fff;
+  border-color: rgb(255 255 255 / 40%);
+}
+
+/* --- Song guide, by section --------------------------------------------- */
+
+.song-section {
+  margin: 10px 0 4px;
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* Both hands, side by side. Dimmed until this is the row being asked for, so the chart reads
+   as one live line and a list of what is coming rather than eight equally loud rows. */
+.song-hands {
+  display: flex;
+  gap: 7px;
+  opacity: 0.45;
+  transition: opacity 140ms ease;
+}
+
+.song-chords li.is-target .song-hands {
+  opacity: 1;
+}
+
+.song-thumb {
+  font-size: 10px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* --- Song writer -------------------------------------------------------- */
+
+#song-builder {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  translate: -50% 0;
+  z-index: 16;
+  width: min(520px, calc(100vw - 32px));
+  max-height: calc(100dvh - 120px);
+  overflow-y: auto;
+  padding: 18px 20px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 16px;
+  background: rgb(7 7 11 / 88%);
+  backdrop-filter: blur(16px);
+}
+
+#song-builder[hidden] {
+  display: none;
+}
+
+.builder-heading {
+  margin-bottom: 12px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.builder-field {
+  display: grid;
+  grid-template-columns: 60px 1fr;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.builder-field span {
+  color: var(--dim);
+  font-size: 12px;
+}
+
+.builder-field input,
+.builder-section-name {
+  padding: 6px 9px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 7px;
+  background: #14141c;
+  color: var(--fg);
+  font: inherit;
+  font-size: 13px;
+}
+
+.builder-sections {
+  display: grid;
+  gap: 8px;
+  margin: 14px 0 10px;
+}
+
+/* The active section is the one chords land in, so it has to be obvious which that is —
+   otherwise tapping a chord puts it somewhere you were not looking. */
+.builder-section {
+  padding: 8px 10px;
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.builder-section.is-active {
+  border-color: rgb(110 231 255 / 45%);
+  background: rgb(110 231 255 / 7%);
+}
+
+.builder-section-head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.builder-section-name {
+  flex: 1;
+}
+
+.builder-drop,
+.builder-saved-row button {
+  width: 24px;
+  height: 24px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 6px;
+  background: none;
+  color: var(--dim);
+  font: inherit;
+  cursor: pointer;
+}
+
+.builder-drop:hover,
+.builder-saved-row button:hover {
+  color: var(--danger);
+  border-color: rgb(255 107 107 / 45%);
+}
+
+.builder-chords {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 8px;
+  min-height: 26px;
+}
+
+.builder-empty {
+  color: #5a5a6c;
+  font-size: 11px;
+}
+
+.builder-tag {
+  padding: 3px 9px;
+  border: 1px solid rgb(110 231 255 / 30%);
+  border-radius: 999px;
+  background: rgb(110 231 255 / 10%);
+  color: var(--fg);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.builder-tag:hover {
+  border-color: rgb(255 107 107 / 55%);
+  background: rgb(255 107 107 / 12%);
+}
+
+.builder-add-section {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 14px;
+}
+
+.builder-add-section button {
+  padding: 4px 10px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 999px;
+  background: none;
+  color: var(--dim);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.builder-add-section button:hover {
+  color: var(--fg);
+  border-color: rgb(255 255 255 / 28%);
+}
+
+/* Fourteen chords, laid out as two rows of seven: majors above, minors below, so the same
+   degree sits in the same column in both. */
+.builder-picker {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 5px;
+  padding: 12px 0;
+  border-top: 1px solid rgb(255 255 255 / 8%);
+}
+
+.builder-chord {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 6px 2px;
+  border: 1px solid rgb(255 255 255 / 8%);
+  border-radius: 9px;
+  background: none;
+  color: var(--fg);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.builder-chord:hover {
+  border-color: rgb(110 231 255 / 45%);
+  background: rgb(110 231 255 / 8%);
+}
+
+.builder-actions {
+  display: flex;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.builder-save {
+  padding: 8px 18px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #04141a;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.builder-save:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.builder-saved {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid rgb(255 255 255 / 8%);
+}
+
+.builder-saved > span {
+  color: var(--dim);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.builder-saved-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 6px;
+  font-size: 13px;
+}
+
+/* Buttons that live inside the settings panel rather than along the bottom of the screen.
+   Same look as the bottom bar so a control does not change appearance by moving. */
+.tuning-actions {
+  margin-bottom: 18px;
+}
+
+.toolbar-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.toolbar-inline button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 11px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  border-radius: 999px;
+  background: rgb(255 255 255 / 4%);
+  color: var(--fg);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.toolbar-inline button:hover {
+  border-color: rgb(110 231 255 / 45%);
+  background: rgb(110 231 255 / 8%);
+}
+
+.toolbar-inline kbd {
+  padding: 1px 5px;
+  border: 1px solid rgb(255 255 255 / 12%);
+  border-radius: 4px;
+  color: var(--dim);
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 10px;
 }

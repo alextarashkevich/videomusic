@@ -22,9 +22,12 @@ export type Toolbar = {
  * non-Latin keyboard layout they used to do nothing at all, because the handler compared
  * against the character produced rather than the key pressed.
  */
-export function createToolbar(buttons: readonly ToolbarButton[]): Toolbar {
+/** `parent` puts the bar somewhere other than the bottom of the screen — the settings panel
+ *  hosts one, so the buttons and the sliders share a scroll. */
+export function createToolbar(buttons: readonly ToolbarButton[], parent?: HTMLElement): Toolbar {
   const bar = document.createElement('nav')
-  bar.id = 'toolbar'
+  if (parent === undefined) bar.id = 'toolbar'
+  else bar.className = 'toolbar-inline'
 
   const refreshers: (() => void)[] = []
 
@@ -55,7 +58,7 @@ export function createToolbar(buttons: readonly ToolbarButton[]): Toolbar {
     bar.append(element)
   }
 
-  document.body.append(bar)
+  ;(parent ?? document.body).append(bar)
 
   return {
     refresh: () => {

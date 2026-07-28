@@ -8,6 +8,7 @@ import {
   chordNotes,
   chordPitches,
   leadVoices,
+  leadVoicing,
   midiToFrequency,
   midiToNote,
   nearestOctave,
@@ -248,12 +249,140 @@ describe('leadVoices', () => {
     expect(second).toEqual(first)
   })
 
+  /**
+   * The complaint these came from: "sometimes it plays higher notes, sometimes lower — with
+   * the same finger".
+   *
+   * It did, and there were two separate reasons. The upper band was wider than an octave, so
+   * every note fitted in it twice and voice leading picked whichever was nearer to where the
+   * voice already was. And the thinnest density silenced voice number *three* rather than
+   * whichever voice held the optional chord tone — so it could drop the third, leaving a
+   * bare root and fifth where major and minor sound identical.
+   */
+  describe('the same gesture always sounds the same', () => {
+    const PATHS: [ScaleDegree, ChordQuality][][] = [
+      [[1, 'major']],
+      [[5, 'major'], [1, 'major']],
+      [[6, 'minor'], [4, 'major'], [1, 'major']],
+      [[3, 'major'], [7, 'major'], [2, 'major'], [1, 'major']],
+      [[5, 'major'], [6, 'minor'], [3, 'major'], [4, 'major'], [1, 'major']],
+    ]
+
+    /** What is actually heard after walking a progression and landing on the target. */
+    function land(
+      path: [ScaleDegree, ChordQuality][],
+      density: Density,
+    ): { heard: number[]; sources: number[] } {
+      let pitches: number[] | null = null
+      let sources: number[] = []
+
+      for (const [degree, quality] of path) {
+        const voicing = leadVoicing(chordPitches(degree, quality, density, defaultConfig), pitches, register)
+        pitches = voicing.pitches
+        sources = voicing.sources
+      }
+
+      const gains = voiceGains(density, sources)
+      return { heard: pitches!.filter((_, i) => gains[i]! > 0).sort((a, b) => a - b), sources }
+    }
+
+    it('lands on one voicing however it got there', () => {
+      for (const density of [1, 2, 3] as Density[]) {
+        const spellings = new Set(PATHS.map((path) => land(path, density).heard.join(',')))
+        expect(spellings.size, `density ${density}: ${[...spellings].join('  |  ')}`).toBe(1)
+      }
+    })
+
+    // The third is the only thing telling major from minor, so it is the one note that must
+    // never be the one dropped.
+    it('always sounds the third, at every density and on every degree', () => {
+      for (const density of [1, 2, 3] as Density[]) {
+        for (const degree of [1, 2, 3, 4, 5, 6, 7] as ScaleDegree[]) {
+          for (const quality of ['major', 'minor'] as ChordQuality[]) {
+            const { heard } = land([[degree, quality]], density)
+            const third = (rootMidi(degree, defaultConfig) + (quality === 'minor' ? 3 : 4)) % 12
+            const classes = heard.map((pitch) => ((pitch % 12) + 12) % 12)
+
+            expect(classes, `${degree} ${quality} d${density}`).toContain(third)
+          }
+        }
+      }
+    })
+
+    it('sounds major and minor differently at every density', () => {
+      for (const density of [1, 2, 3] as Density[]) {
+        const major = land([[1, 'major']], density).heard
+        const minor = land([[1, 'minor']], density).heard
+        expect(major, `density ${density}`).not.toEqual(minor)
+      }
+    })
+  })
+
   it('never puts two voices on the same note', () => {
     let previous: number[] | null = null
     for (const density of [1, 2, 3, 1, 3] as Density[]) {
       for (const [degree, quality] of FOUR_CHORDS) {
         previous = leadVoices(chordPitches(degree, quality, density, defaultConfig), previous, register)
         expect(new Set(previous).size, `${degree} ${quality} d${density}`).toBe(previous.length)
+      }
+    }
+  })
+
+  /**
+   * The complaint these came from: "on C, with one finger on the left hand, it sounds very
+   * high". It did. Every chord was packed into a single octave above the root, so nothing
+   * below C3 ever sounded, at any density — and the thinnest density is where a chord with
+   * no bottom is most exposed.
+   */
+  describe('the bass voice', () => {
+    const DEGREES: ScaleDegree[] = [1, 2, 3, 4, 5, 6, 7]
+
+    it('sounds a root well below the rest of the chord, on every degree', () => {
+      for (const degree of DEGREES) {
+        for (const density of [1, 2, 3] as Density[]) {
+          const placed = leadVoices(chordPitches(degree, 'major', density, defaultConfig), null, register)
+          const [bass, ...upper] = placed as [number, ...number[]]
+
+          expect(bass, `degree ${degree} d${density}`).toBe(Math.min(...placed))
+          expect(Math.min(...upper) - bass, `degree ${degree} d${density}`).toBeGreaterThanOrEqual(7)
+        }
+      }
+    })
+
+    // Density silences voices by index, so the bass is safe only because it is voice 0 and
+    // only voice 3 is ever silenced. Stated here because it is the thing that would quietly
+    // undo all of the above.
+    it('is never the voice a thinner density silences', () => {
+      for (const density of [1, 2, 3] as Density[]) {
+        expect(voiceGains(density)[0], `density ${density}`).toBeGreaterThan(0)
+      }
+    })
+
+    it('stays in the bottom octave through a progression', () => {
+      let previous: number[] | null = null
+      for (const density of [1, 2, 3, 1] as Density[]) {
+        for (const [degree, quality] of FOUR_CHORDS) {
+          previous = leadVoices(chordPitches(degree, quality, density, defaultConfig), previous, register)
+          expect(previous[0], `${degree} ${quality} d${density}`).toBeLessThanOrEqual(register.low + 12)
+        }
+      }
+    })
+  })
+
+  // `separate` used to resolve a collision by moving a voice up an octave unconditionally,
+  // which could push it clean out of the top of the register — an F5 on an instrument whose
+  // highest note is G4, heard as one voice leaping away from its own chord.
+  it('keeps every voice inside the register, even when notes collide', () => {
+    let previous: number[] | null = null
+    for (const density of [1, 2, 3, 2, 1] as Density[]) {
+      for (const degree of [1, 2, 3, 4, 5, 6, 7] as ScaleDegree[]) {
+        for (const quality of ['major', 'minor'] as ChordQuality[]) {
+          previous = leadVoices(chordPitches(degree, quality, density, defaultConfig), previous, register)
+          for (const pitch of previous) {
+            expect(pitch, `${degree} ${quality} d${density}`).toBeGreaterThanOrEqual(register.low)
+            expect(pitch, `${degree} ${quality} d${density}`).toBeLessThanOrEqual(register.high)
+          }
+        }
       }
     }
   })

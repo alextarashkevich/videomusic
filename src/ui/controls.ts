@@ -247,6 +247,19 @@ export const CONTROLS: readonly Control[] = [
   },
   {
     group: 'Feel',
+    label: 'Wait for both hands',
+    min: 0,
+    max: 0.4,
+    step: 0.01,
+    format: ms,
+    get: (c) => c.smoothing.settleSeconds,
+    set: (c, v) => {
+      c.smoothing.settleSeconds = v
+    },
+    hint: 'How long a chord must hold still before it plays. Higher catches the wrong chords you pass through changing hands; the whole instrument answers that much later. Zero is off.',
+  },
+  {
+    group: 'Feel',
     label: 'Mute fade',
     min: 0.02,
     max: 1.5,
